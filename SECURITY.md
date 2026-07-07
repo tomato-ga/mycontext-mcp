@@ -16,6 +16,16 @@ Only example files should be committed:
 - `notion-context-sync/mirror.config.example.json`
 - `notion-context-mcp-worker/.dev.vars.example`
 
+For personal use, prefer `MIRROR_CONFIG_JSON` inside `notion-context-sync/.env`
+for private Notion page IDs and titles. `mirror.config.json` remains supported
+as an ignored local file.
+
+Run this before pushing:
+
+```bash
+./scripts/check-public-safety.sh
+```
+
 If a real credential is accidentally committed or shared in logs, rotate it before relying on this project in production.
 
 ## Public Surface

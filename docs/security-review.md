@@ -14,7 +14,7 @@ No committed production secrets should be included in the public repository. Rea
 
 - Severity: High
 - Location: `.gitignore`
-- Evidence: local-only files such as `.env`, `.dev.vars`, and `mirror.config.json` are excluded by root gitignore rules.
+- Evidence: local-only files such as `.env`, `.dev.vars`, and `mirror.config.json` are excluded by root gitignore rules. Private Notion page IDs/titles can also live in ignored `.env` via `MIRROR_CONFIG_JSON`.
 - Impact: committing Notion API keys, TiDB credentials, or MCP bearer tokens would allow unauthorized reads of private context data.
 - Fix: keep only `.env.example`, `.dev.vars.example`, and `mirror.config.example.json` in git. Use local env files and Wrangler secrets for real values.
 - Status: Fixed.
@@ -79,4 +79,4 @@ git add -n .
 git status --short
 ```
 
-Result: staged secret scan, personal absolute path scan, and `git diff --cached --check` passed.
+Result: `./scripts/check-public-safety.sh`, staged secret scan, personal absolute path scan, and `git diff --cached --check` passed.

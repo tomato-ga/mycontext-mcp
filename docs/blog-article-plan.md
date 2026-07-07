@@ -72,7 +72,7 @@ Notion pages
 
 説明する流れ:
 
-1. `mirror.config.json` に seed page を置く。
+1. `.env` の `MIRROR_CONFIG_JSON`、または gitignored な `mirror.config.json` に seed page を置く。
 2. seed page の本文を Notion API から Markdown 化する。
 3. `child_page` と `link_to_page` を辿って関連ページも拾う。
 4. hash が変わったページだけ TiDB に upsert する。

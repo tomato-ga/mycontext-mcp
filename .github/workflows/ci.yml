@@ -20,6 +20,7 @@ jobs:
           cache-dependency-path: notion-context-sync/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: notion-context-sync
+      - run: ./scripts/check-public-safety.sh
       - run: pnpm run typecheck
         working-directory: notion-context-sync
       - run: pnpm test
@@ -39,6 +40,7 @@ jobs:
           cache-dependency-path: notion-context-mcp-worker/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: notion-context-mcp-worker
+      - run: ./scripts/check-public-safety.sh
       - run: pnpm run typecheck
         working-directory: notion-context-mcp-worker
       - run: pnpm test

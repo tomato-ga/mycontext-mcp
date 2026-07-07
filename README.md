@@ -28,6 +28,16 @@ TiDB notion_pages
 | `notion-context-mcp-worker/` | TiDB の `notion_pages` を読む Cloudflare Workers Remote MCP server。`/mcp` は bearer token 必須、`/healthz` は公開 liveness endpoint。 |
 | `docs/` | 記事企画や運用メモなど、プロジェクト横断の資料。 |
 
+## 個人利用と公開repoの分離
+
+個人の Notion pageId/title、Notion API key、TiDB credentials、MCP bearer token は公開repoに入れません。ローカルでは `notion-context-sync/.env` の `MIRROR_CONFIG_JSON` と、Worker用の `.dev.vars` / Wrangler secrets で管理します。
+
+詳細は [docs/personal-use.md](docs/personal-use.md) を参照してください。push前には次を実行できます。
+
+```bash
+./scripts/check-public-safety.sh
+```
+
 ## データモデル
 
 保存先は `notion_pages` のみです。
