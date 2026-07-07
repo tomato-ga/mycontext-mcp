@@ -14,6 +14,11 @@ const mirrorConfigSchema = z.object({
 
 export async function loadMirrorConfig(configPath: string): Promise<MirrorConfig> {
   const absolutePath = path.resolve(configPath);
+  const envConfig = optionalEnv("MIRROR_CONFIG_JSON");
+  if (envConfig !== undefined) {
+    return parseMirrorConfig(envConfig, "MIRROR_CONFIG_JSON");
+  }
+
   let raw: string;
   try {
     raw = await fs.readFile(absolutePath, "utf8");
@@ -21,11 +26,15 @@ export async function loadMirrorConfig(configPath: string): Promise<MirrorConfig
     throw new AppError("config_read_failed", `failed to read config: ${absolutePath}`, 3, error);
   }
 
+  return parseMirrorConfig(raw, absolutePath);
+}
+
+function parseMirrorConfig(raw: string, sourceName: string): MirrorConfig {
   let decoded: unknown;
   try {
     decoded = JSON.parse(raw) as unknown;
   } catch (error) {
-    throw new AppError("config_json_invalid", `config is not valid JSON: ${absolutePath}`, 3, error);
+    throw new AppError("config_json_invalid", `config is not valid JSON: ${sourceName}`, 3, error);
   }
 
   const parsed = mirrorConfigSchema.safeParse(decoded);

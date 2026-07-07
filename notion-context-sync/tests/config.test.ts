@@ -1,10 +1,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { loadMirrorConfig } from "../src/config.js";
 
 describe("config", () => {
+  afterEach(() => {
+    delete process.env.MIRROR_CONFIG_JSON;
+  });
+
   it("loads valid page-only config", async () => {
     const configPath = await writeConfig({
       pages: [{ pageId: "page-1", title: "Profile" }]
@@ -26,6 +30,18 @@ describe("config", () => {
     });
 
     await expect(loadMirrorConfig(configPath)).rejects.toMatchObject({ code: "duplicate_page_id" });
+  });
+
+  it("loads config from MIRROR_CONFIG_JSON", async () => {
+    process.env.MIRROR_CONFIG_JSON = JSON.stringify({
+      pages: [{ pageId: "page-from-env", title: "Env Profile" }]
+    });
+
+    const config = await loadMirrorConfig("missing-config-file.json");
+    expect(config.pages[0]).toMatchObject({
+      pageId: "page-from-env",
+      title: "Env Profile"
+    });
   });
 });
 

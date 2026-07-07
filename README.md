@@ -50,7 +50,7 @@ notion_pages(
 
 ## 同期の流れ
 
-1. `notion-context-sync/mirror.config.json` に seed page を設定する。
+1. `notion-context-sync/.env` の `MIRROR_CONFIG_JSON`、または gitignored な `mirror.config.json` に seed page を設定する。
 2. `pnpm migrate` で `notion_pages` を作る。
 3. `pnpm pull` で Notion から Markdown を取得し、TiDB に upsert する。
 4. `pull` は seed page 配下の `child_page` と `link_to_page` を最大 200 ページまで探索する。
@@ -86,13 +86,12 @@ Worker は stateless です。Durable Objects、migrations、raw SQL tool、Noti
 cd notion-context-sync
 pnpm install
 cp .env.example .env
-cp mirror.config.example.json mirror.config.json
 pnpm migrate
 pnpm pull
 pnpm doctor
 ```
 
-`.env` には Notion integration secret と TiDB 接続情報を入れます。実値は commit しません。
+`.env` には Notion integration secret、TiDB 接続情報、必要なら `MIRROR_CONFIG_JSON` の Notion pageId/title を入れます。実値は commit しません。`mirror.config.json` を使う場合も gitignored なローカルファイルとして扱います。
 
 検索:
 

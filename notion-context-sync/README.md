@@ -30,10 +30,13 @@ Not implemented, by design:
    target Notion page with it.
 2. Copy `.env.example` to `.env` and fill in `NOTION_API_KEY` / TiDB connection
    values. `.env` is gitignored.
-3. Copy `mirror.config.example.json` to `mirror.config.json` and set only the
-   seed `pages[]` entries (`pageId` + `title`). `pull` will also recurse through
-   `child_page` blocks and `link_to_page` blocks below those seed pages.
-4. Install dependencies:
+3. Put the seed `pages[]` entries (`pageId` + `title`) in `MIRROR_CONFIG_JSON`
+   inside `.env`. If you prefer a separate local file, copy
+   `mirror.config.example.json` to `mirror.config.json`; that file is also
+   gitignored. `MIRROR_CONFIG_JSON` takes precedence when present.
+4. `pull` will also recurse through `child_page` blocks and `link_to_page`
+   blocks below those seed pages.
+5. Install dependencies:
 
 ```bash
 pnpm install
