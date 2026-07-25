@@ -3,14 +3,22 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  EDITOR_KNOWLEDGE_DOCUMENT_URI_TEMPLATE,
   EDITOR_KNOWLEDGE_SECTION_URI_TEMPLATE,
   registerEditorKnowledgeResources
 } from "../src/resources/editorKnowledge.js";
 import type { TidbClient } from "../src/tidb.js";
 
 describe("editor knowledge MCP resources", () => {
-  it("lists the two sectioned kikaku documents and active delivery sections, then reads a section", async () => {
+  it("lists every editor knowledge document (including an open-ended kikaku-fulltext-* one) and active delivery sections, then reads a section", async () => {
     const execute = vi.fn(async (sql: string, params?: readonly unknown[]) => {
+      if (sql.includes("SELECT document_id, title FROM editor_knowledge_documents")) {
+        return [
+          { document_id: "kikaku-composition-playbook", title: "企画構成プレイブック" },
+          { document_id: "kikaku-db-catalog", title: "企画カタログ427" },
+          { document_id: "kikaku-fulltext-3", title: "企画ノウハウ全文集 3（No.97〜No.144）" }
+        ];
+      }
       if (sql.includes("sections.section_id = sections.delivery_section_id")) {
         return [groupRow(), entryRow()];
       }
@@ -18,9 +26,9 @@ describe("editor knowledge MCP resources", () => {
         return [entryRow()];
       }
       if (sql.includes("WHERE document_id = ?")) {
-        return [params?.[0] === "editor-knowledge:kikaku-composition-playbook"
-          ? playbookDocumentRow()
-          : catalogDocumentRow()];
+        if (params?.[0] === "editor-knowledge:kikaku-composition-playbook") return [playbookDocumentRow()];
+        if (params?.[0] === "editor-knowledge:kikaku-fulltext-3") return [fulltextDocumentRow()];
+        return [catalogDocumentRow()];
       }
       return [];
     });
@@ -37,6 +45,7 @@ describe("editor knowledge MCP resources", () => {
       expect(listed.resources.map((resource) => resource.uri)).toEqual(expect.arrayContaining([
         "mycontext://editor-knowledge/kikaku-composition-playbook",
         "mycontext://editor-knowledge/kikaku-db-catalog",
+        "mycontext://editor-knowledge/kikaku-fulltext-3",
         "mycontext://editor-knowledge/kikaku-db-catalog/sections/group-a",
         "mycontext://editor-knowledge/kikaku-db-catalog/sections/no-001"
       ]));
@@ -57,6 +66,7 @@ describe("editor knowledge MCP resources", () => {
 
       const templates = await sdkClient.listResourceTemplates();
       expect(templates.resourceTemplates).toEqual(expect.arrayContaining([
+        expect.objectContaining({ uriTemplate: EDITOR_KNOWLEDGE_DOCUMENT_URI_TEMPLATE }),
         expect.objectContaining({ uriTemplate: EDITOR_KNOWLEDGE_SECTION_URI_TEMPLATE })
       ]));
 
@@ -83,6 +93,20 @@ describe("editor knowledge MCP resources", () => {
           _meta: expect.objectContaining({
             documentId: "kikaku-composition-playbook",
             sectionRevisionSha256: "e".repeat(64)
+          })
+        })
+      ]);
+
+      // kikaku-fulltext-3 has no dedicated code-level registration anywhere in this module — it
+      // is readable purely because a matching row exists in editor_knowledge_documents.
+      const fulltextDocument = await sdkClient.readResource({
+        uri: "mycontext://editor-knowledge/kikaku-fulltext-3"
+      });
+      expect(fulltextDocument.contents).toEqual([
+        expect.objectContaining({
+          _meta: expect.objectContaining({
+            documentId: "kikaku-fulltext-3",
+            sectionRevisionSha256: "b".repeat(64)
           })
         })
       ]);
@@ -153,6 +177,23 @@ function catalogDocumentRow(): Record<string, unknown> {
     section_revision_sha256: "a".repeat(64),
     section_count: 6,
     search_span_count: 4,
+    source_truncated: false,
+    unknown_block_ids: [],
+    last_synced_at: null
+  };
+}
+
+function fulltextDocumentRow(): Record<string, unknown> {
+  return {
+    document_id: "editor-knowledge:kikaku-fulltext-3",
+    source: "editor_knowledge",
+    source_id: "kikaku-fulltext-3",
+    title: "企画ノウハウ全文集 3（No.97〜No.144）",
+    markdown: "# 企画ノウハウ全文集 3（No.97〜No.144）",
+    markdown_sha256: "c".repeat(64),
+    section_revision_sha256: "b".repeat(64),
+    section_count: 4,
+    search_span_count: 3,
     source_truncated: false,
     unknown_block_ids: [],
     last_synced_at: null

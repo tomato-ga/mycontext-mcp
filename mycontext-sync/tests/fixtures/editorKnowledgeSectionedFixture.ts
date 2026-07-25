@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { EditorKnowledgeSectionedSource } from "../../src/editorKnowledge.js";
+import type {
+  EditorKnowledgeSectionedDocumentId,
+  EditorKnowledgeSectionedSource
+} from "../../src/editorKnowledge.js";
 
 export async function writeKikakuPlaybookFixture() {
   const markdown = [
@@ -49,14 +52,43 @@ export async function writeKikakuCatalogFixture() {
   return writeKikakuSourceFixture("kikaku-db-catalog", markdown);
 }
 
+export async function writeKikakuFulltextFixture() {
+  const markdown = [
+    "# 企画ノウハウ全文集 3（No.97〜No.144）",
+    "",
+    "コンテンツ企画案DBの根拠ノート本文を無加工（機微情報マスキングのみ）で収録した全文集。",
+    "",
+    "## No.97 ｜ 最初の企画",
+    "- **索引**: editor-knowledge:kikaku-db-catalog#no-097",
+    "",
+    "### 根拠ノート全文（マスキング済み）",
+    "",
+    "本文1。",
+    "",
+    "## No.98 ｜ 二つ目の企画",
+    "- **索引**: editor-knowledge:kikaku-db-catalog#no-098",
+    "",
+    "### 根拠ノート全文（マスキング済み）",
+    "",
+    "本文2。",
+    "",
+    "## No.なし-1 ｜ 番号なしの企画",
+    "根拠ノート本文はDB上に存在しない（本文取得状態: 未特定）。索引の要旨を参照。",
+    ""
+  ].join("\n");
+  return writeKikakuSourceFixture("kikaku-fulltext-3", markdown);
+}
+
 export async function writeKikakuSourceFixture(
-  documentId: "kikaku-composition-playbook" | "kikaku-db-catalog",
+  documentId: EditorKnowledgeSectionedDocumentId,
   markdown: string
 ) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), `editor-${documentId}-`));
   const relativePath = documentId === "kikaku-composition-playbook"
     ? "kikaku/composition-playbook.md"
-    : "kikaku/kikaku-db-catalog.md";
+    : documentId === "kikaku-db-catalog"
+      ? "kikaku/kikaku-db-catalog.md"
+      : `kikaku/${documentId}.md`;
   const source: EditorKnowledgeSectionedSource = { documentId, relativePath };
   const target = path.join(root, relativePath);
   await fs.mkdir(path.dirname(target), { recursive: true });

@@ -640,6 +640,92 @@ export function parseKikakuCatalog(documentTitle: string, lines: string[]): Pars
   };
 }
 
+const KIKAKU_FULLTEXT_ENTRY_PATTERN = /^No\.(?:(\d{1,3})|なし-(\d{1,2})) ｜ (.+)$/;
+
+/**
+ * Shared with editorKnowledge.ts, see parseKikakuPlaybook. Unlike parseKikakuCatalog, this
+ * document has no catalog-style structural constraints (no "#### forbidden", no required
+ * groups, no required sequential numbering): the only thing that matters is finding the entry
+ * boundaries. Every other heading in the source — H2 or deeper — is left untouched as ordinary
+ * section body text, because the source is a verbatim (masking-only) reproduction of Notion
+ * note bodies that may contain their own heading-shaped lines.
+ */
+export function parseKikakuFulltext(documentTitle: string, lines: string[]): ParsedDocumentSections {
+  const headings = scanMarkdownHeadings(lines);
+  const entryHeadings = headings.flatMap((heading) => {
+    if (heading.level !== 2) return [];
+    const match = KIKAKU_FULLTEXT_ENTRY_PATTERN.exec(heading.title);
+    if (match === null) return [];
+    const numbered = match[1] !== undefined;
+    return [{ ...heading, numbered, number: Number(numbered ? match[1] : match[2]) }];
+  });
+
+  const sections: ParsedSectionInput[] = [];
+  const outlineEntries: Array<{ key: string; title: string; sectionNumber: string | null }> = [];
+
+  const firstEntryLine = entryHeadings[0]?.line ?? lines.length + 1;
+  const preambleMarkdown = sliceLines(lines, 2, firstEntryLine - 1);
+  if (preambleMarkdown.trim().length > 0) {
+    const preamblePath = [documentTitle, "前書き"];
+    sections.push({
+      sectionId: "preamble",
+      parentSectionId: null,
+      deliverySectionId: "preamble",
+      sectionType: "markdown_heading",
+      headingLevel: null,
+      sectionNumber: null,
+      title: "前書き",
+      headingPath: preamblePath,
+      contentLayer: "index",
+      sourceLineStart: 2,
+      sourceLineEnd: firstEntryLine - 1,
+      directMarkdown: preambleMarkdown,
+      sectionMarkdown: preambleMarkdown,
+      retrievalText: contextualize(preamblePath, preambleMarkdown),
+      isSearchable: false,
+      relatedSourcePath: null,
+      freshnessClass: "static_framework"
+    });
+  }
+
+  for (let index = 0; index < entryHeadings.length; index += 1) {
+    const heading = entryHeadings[index];
+    const entryEnd = entryHeadings[index + 1]?.line ?? lines.length + 1;
+    const sectionId = heading.numbered
+      ? `no-${threeDigits(heading.number)}`
+      : `x-${twoDigits(heading.number)}`;
+    const entryPath = [documentTitle, heading.title];
+    const entryMarkdown = sliceLines(lines, heading.line, entryEnd - 1);
+    const sectionNumber = heading.numbered ? String(heading.number) : null;
+    sections.push({
+      sectionId,
+      parentSectionId: null,
+      deliverySectionId: sectionId,
+      sectionType: "markdown_heading",
+      headingLevel: 2,
+      sectionNumber,
+      title: heading.title,
+      headingPath: entryPath,
+      contentLayer: "detail",
+      sourceLineStart: heading.line,
+      sourceLineEnd: entryEnd - 1,
+      directMarkdown: entryMarkdown,
+      sectionMarkdown: entryMarkdown,
+      retrievalText: entryMarkdown,
+      isSearchable: true,
+      relatedSourcePath: null,
+      freshnessClass: "dated_example"
+    });
+    outlineEntries.push({ key: sectionId, title: heading.title, sectionNumber });
+  }
+
+  return {
+    sections,
+    outline: { hasPreamble: preambleMarkdown.trim().length > 0, entryCount: entryHeadings.length, entries: outlineEntries },
+    routingMetadata: { defaultRetrieval: "direct", detailAvailable: true }
+  };
+}
+
 function parseKikakuCatalogEntryHeading(title: string): { numbered: boolean; number: number } {
   const match = KIKAKU_CATALOG_ENTRY_PATTERN.exec(title);
   if (match === null) {

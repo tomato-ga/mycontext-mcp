@@ -491,7 +491,7 @@ function defaultParseEditorKnowledge(input: {
   if (!isEditorKnowledgeSectionedDocumentId(input.managed.documentId)) {
     throw new SyncFailure(
       "editor_knowledge_document_id_invalid",
-      "Editor Knowledge Document ID must be kikaku-composition-playbook or kikaku-db-catalog"
+      "Editor Knowledge Document ID must be kikaku-composition-playbook, kikaku-db-catalog, or start with kikaku-fulltext-"
     );
   }
   try {

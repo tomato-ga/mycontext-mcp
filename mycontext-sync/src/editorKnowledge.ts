@@ -6,6 +6,7 @@ import {
   assertStorageLimits,
   assertUniqueSectionIds,
   parseKikakuCatalog,
+  parseKikakuFulltext,
   parseKikakuPlaybook,
   splitContentLines
 } from "./businessKnowledge.js";
@@ -37,16 +38,19 @@ export const EDITOR_KNOWLEDGE_SOURCES: readonly EditorKnowledgeSource[] = [
 ];
 
 /**
- * kikaku-composition-playbook and kikaku-db-catalog are Editor Knowledge documents (not
- * Business Knowledge), but they need the "document + section table + search span" shape that
- * Business Knowledge already has. They are kept in a separate source list from
- * EDITOR_KNOWLEDGE_SOURCES (which stays a fixed 8-document, non-sectioned allowlist) and are
- * loaded through loadEditorKnowledgeSectionedDocument below, which reuses the Business
- * Knowledge parsers/validators unchanged.
+ * kikaku-composition-playbook, kikaku-db-catalog, and the kikaku-fulltext-* family are Editor
+ * Knowledge documents (not Business Knowledge), but they need the "document + section table +
+ * search span" shape that Business Knowledge already has. They are kept in a separate source
+ * list from EDITOR_KNOWLEDGE_SOURCES (which stays a fixed 8-document, non-sectioned allowlist)
+ * and are loaded through loadEditorKnowledgeSectionedDocument below, which reuses the Business
+ * Knowledge parsers/validators unchanged. kikaku-fulltext-* is an open-ended family (one
+ * document per split of the full-text collection) rather than a single fixed ID, so it is
+ * modeled as a template literal type instead of a third literal alternative.
  */
 export type EditorKnowledgeSectionedDocumentId =
   | "kikaku-composition-playbook"
-  | "kikaku-db-catalog";
+  | "kikaku-db-catalog"
+  | `kikaku-fulltext-${string}`;
 
 export interface EditorKnowledgeSectionedSource {
   documentId: EditorKnowledgeSectionedDocumentId;
@@ -69,7 +73,9 @@ export const EDITOR_KNOWLEDGE_SECTIONED_SOURCES: readonly EditorKnowledgeSection
 export function isEditorKnowledgeSectionedDocumentId(
   value: string
 ): value is EditorKnowledgeSectionedDocumentId {
-  return value === "kikaku-composition-playbook" || value === "kikaku-db-catalog";
+  return value === "kikaku-composition-playbook"
+    || value === "kikaku-db-catalog"
+    || value.startsWith("kikaku-fulltext-");
 }
 
 export type EditorKnowledgeContentLayer = "summary" | "detail" | "index";
@@ -220,7 +226,9 @@ export function parseEditorKnowledgeSectionedMarkdown(
 
   const parsed = documentId === "kikaku-composition-playbook"
     ? parseKikakuPlaybook(title, lines)
-    : parseKikakuCatalog(title, lines);
+    : documentId === "kikaku-db-catalog"
+      ? parseKikakuCatalog(title, lines)
+      : parseKikakuFulltext(title, lines);
   const sections: EditorKnowledgeSection[] = parsed.sections.map((section, index) => ({
     ...section,
     documentId,

@@ -596,6 +596,59 @@ describe("Notion-managed context synchronization", () => {
       expect(repository.getEditorKnowledgeSectionedState).not.toHaveBeenCalled();
       expect(repository.activateEditorKnowledgeSectioned).not.toHaveBeenCalled();
     });
+
+    it("routes a kikaku-fulltext-* Document ID to the fulltext parser, keeping other headings as body text", async () => {
+      currentManaged = managedDocument({
+        documentId: "kikaku-fulltext-3",
+        name: "企画ノウハウ全文集 3（No.97〜No.144）",
+        category: "Editor Knowledge",
+        schemaVersion: "editor-knowledge-v1"
+      });
+      vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(KIKAKU_FULLTEXT_MARKDOWN));
+
+      const result = await processSyncMessage(message("page.properties_updated"), {
+        notion,
+        repository,
+        now: () => now
+      });
+
+      expect(result).toMatchObject({ status: "synced", documentId: "kikaku-fulltext-3" });
+      const activated = vi.mocked(repository.activateEditorKnowledgeSectioned).mock.calls[0]?.[0];
+      expect(activated?.document.sections.map((section) => section.sectionId)).toEqual([
+        "preamble",
+        "no-097",
+        "no-098",
+        "x-01"
+      ]);
+      const entry = activated?.document.sections.find((section) => section.sectionId === "no-097");
+      expect(entry?.sectionMarkdown).toContain("### 根拠ノート全文（マスキング済み）");
+      expect(entry?.sectionMarkdown).toContain("## No.9 ｜ dummy"); // fenced, not a real boundary
+    });
+
+    it("fails when a kikaku-fulltext-* page violates the entry heading contract via a duplicate No.", async () => {
+      currentManaged = managedDocument({
+        documentId: "kikaku-fulltext-9",
+        name: "企画ノウハウ全文集 9",
+        category: "Editor Knowledge",
+        schemaVersion: "editor-knowledge-v1"
+      });
+      vi.mocked(notion.getMarkdown).mockResolvedValue(markdown([
+        "## No.1 ｜ 一つ目",
+        "本文",
+        "",
+        "## No.1 ｜ 重複",
+        "本文",
+        ""
+      ].join("\n")));
+
+      const result = await processSyncMessage(message("page.properties_updated"), {
+        notion,
+        repository
+      });
+
+      expect(result).toMatchObject({ status: "failed", reason: "editor_knowledge_validation_failed" });
+      expect(repository.activateEditorKnowledgeSectioned).not.toHaveBeenCalled();
+    });
   });
 
 });
@@ -684,5 +737,35 @@ const KIKAKU_CATALOG_MARKDOWN = [
   "",
   "### No.2 ｜ 二つ目の企画",
   "企画2の本文。",
+  ""
+].join("\n");
+
+// kikaku-fulltext-* has no group/sequence contract: entry boundaries are only H2 lines matching
+// "No.N ｜ Title" / "No.なし-N ｜ Title" exactly, and everything else (other heading levels,
+// fenced code) survives verbatim as body text.
+const KIKAKU_FULLTEXT_MARKDOWN = [
+  "# 企画ノウハウ全文集 3（No.97〜No.144）",
+  "",
+  "コンテンツ企画案DBの根拠ノート本文を無加工（機微情報マスキングのみ）で収録した全文集。",
+  "",
+  "## No.97 ｜ 最初の企画",
+  "- **索引**: editor-knowledge:kikaku-db-catalog#no-097",
+  "",
+  "### 根拠ノート全文（マスキング済み）",
+  "",
+  "本文1。コードフェンス内のダミー見出しはエントリ境界にならない:",
+  "```",
+  "## No.9 ｜ dummy",
+  "```",
+  "",
+  "## No.98 ｜ 二つ目の企画",
+  "- **索引**: editor-knowledge:kikaku-db-catalog#no-098",
+  "",
+  "### 根拠ノート全文（マスキング済み）",
+  "",
+  "本文2。",
+  "",
+  "## No.なし-1 ｜ 番号なしの企画",
+  "根拠ノート本文はDB上に存在しない（本文取得状態: 未特定）。索引の要旨を参照。",
   ""
 ].join("\n");

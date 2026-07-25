@@ -595,6 +595,30 @@ export async function getBusinessKnowledgeSection(
   return rows[0] === undefined ? null : parseBusinessKnowledgeResource(rows[0]);
 }
 
+export interface EditorKnowledgeDocumentSummary {
+  document_id: string;
+  title: string;
+}
+
+/**
+ * Generic across the whole editor_knowledge_documents table — not limited to
+ * kikaku-composition-playbook/kikaku-db-catalog. Used to enumerate the open-ended
+ * kikaku-fulltext-* family (and any future Editor Knowledge document) for the
+ * mycontext://editor-knowledge/{documentId} resource template's list callback, so a new
+ * document only needs a row in TiDB, not a code change here.
+ */
+export async function listEditorKnowledgeDocuments(
+  client: TidbClient
+): Promise<EditorKnowledgeDocumentSummary[]> {
+  const rows = await client.execute(
+    `SELECT document_id, title FROM editor_knowledge_documents ORDER BY document_id ASC`
+  );
+  return rows.map((row) => ({
+    document_id: parseRequiredString(row.document_id, "document_id"),
+    title: parseRequiredString(row.title, "title")
+  }));
+}
+
 export async function listEditorKnowledgeResources(
   client: TidbClient
 ): Promise<ListedEditorKnowledgeResource[]> {

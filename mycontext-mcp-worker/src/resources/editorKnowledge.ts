@@ -1,58 +1,78 @@
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
-  EDITOR_KNOWLEDGE_SECTIONED_DOCUMENT_IDS,
   buildEditorKnowledgeDocumentUri,
   buildEditorKnowledgeSectionUri,
-  toEditorKnowledgeDocumentId,
-  type EditorKnowledgeSectionedDocumentId
+  toEditorKnowledgeDocumentId
 } from "../editorKnowledge.js";
 import {
   getDocument,
   getEditorKnowledgeSection,
+  listEditorKnowledgeDocuments,
   listEditorKnowledgeResources,
   type TidbClient
 } from "../tidb.js";
 
+export const EDITOR_KNOWLEDGE_DOCUMENT_URI_TEMPLATE = "mycontext://editor-knowledge/{documentId}";
 export const EDITOR_KNOWLEDGE_SECTION_URI_TEMPLATE =
   "mycontext://editor-knowledge/{documentId}/sections/{sectionId}";
 
-const EDITOR_KNOWLEDGE_DOCUMENT_TITLES: Record<EditorKnowledgeSectionedDocumentId, string> = {
-  "kikaku-composition-playbook": "企画構成プレイブック",
-  "kikaku-db-catalog": "企画カタログ427"
-};
-
 export function registerEditorKnowledgeResources(server: McpServer, client: TidbClient): void {
-  for (const documentId of EDITOR_KNOWLEDGE_SECTIONED_DOCUMENT_IDS) {
-    const uri = buildEditorKnowledgeDocumentUri(documentId);
-    server.registerResource(
-      `editor-knowledge-${documentId}`,
-      uri,
-      {
-        title: EDITOR_KNOWLEDGE_DOCUMENT_TITLES[documentId],
-        description: "Full source Markdown retained for audit and section regeneration.",
-        mimeType: "text/markdown"
-      },
-      async (requestedUri) => {
-        const document = await getDocument(client, toEditorKnowledgeDocumentId(documentId));
-        if (document === null || document.source !== "editor_knowledge") {
-          throw resourceNotFound(requestedUri.toString());
-        }
+  // A ResourceTemplate (not a fixed per-ID registerResource loop) so that any Editor Knowledge
+  // document — including every kikaku-fulltext-* split, not just the two originally sectioned
+  // documents — is listable and readable purely from what is in TiDB, with no code-level
+  // allowlist to keep in sync as new documents are added.
+  const documentTemplate = new ResourceTemplate(
+    EDITOR_KNOWLEDGE_DOCUMENT_URI_TEMPLATE,
+    {
+      list: async () => {
+        const documents = await listEditorKnowledgeDocuments(client);
         return {
-          contents: [{
-            uri: requestedUri.toString(),
-            mimeType: "text/markdown",
-            text: document.markdown,
-            _meta: {
-              documentId,
-              markdownSha256: document.markdown_sha256,
-              sectionRevisionSha256: document.section_revision_sha256
-            }
-          }]
+          resources: documents.map((document) => ({
+            uri: buildEditorKnowledgeDocumentUri(document.document_id),
+            name: document.document_id,
+            title: document.title,
+            description: "Full source Markdown retained for audit and section regeneration.",
+            mimeType: "text/markdown"
+          }))
         };
       }
-    );
-  }
+    }
+  );
+
+  server.registerResource(
+    "editor-knowledge-document",
+    documentTemplate,
+    {
+      title: "Editor knowledge document",
+      description: "Full source Markdown retained for audit and section regeneration.",
+      mimeType: "text/markdown"
+    },
+    async (requestedUri, variables) => {
+      const documentId = decodeVariable(variables.documentId, "documentId");
+      const expectedUri = buildEditorKnowledgeDocumentUri(documentId);
+      if (requestedUri.toString() !== expectedUri) {
+        throw resourceNotFound(requestedUri.toString());
+      }
+
+      const document = await getDocument(client, toEditorKnowledgeDocumentId(documentId));
+      if (document === null || document.source !== "editor_knowledge") {
+        throw resourceNotFound(requestedUri.toString());
+      }
+      return {
+        contents: [{
+          uri: requestedUri.toString(),
+          mimeType: "text/markdown",
+          text: document.markdown,
+          _meta: {
+            documentId,
+            markdownSha256: document.markdown_sha256,
+            sectionRevisionSha256: document.section_revision_sha256
+          }
+        }]
+      };
+    }
+  );
 
   const template = new ResourceTemplate(
     EDITOR_KNOWLEDGE_SECTION_URI_TEMPLATE,
