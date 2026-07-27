@@ -35,10 +35,19 @@ describe("resolveReadContextId", () => {
     });
   });
 
+  it("resolves an exact analysis skill context", () => {
+    expect(resolveReadContextId("skill-context:resolution-diagnose")).toEqual({
+      kind: "skill-context",
+      id: "skill-context:resolution-diagnose",
+      skillId: "resolution-diagnose"
+    });
+  });
+
   it("rejects legacy, guessed, and malformed IDs", () => {
     expect(resolveReadContextId("page-1")).toBeNull();
     expect(resolveReadContextId("business-knowledge:bad#not/a-section")).toBeNull();
     expect(resolveReadContextId("editor-knowledge:bad#not/a-section")).toBeNull();
     expect(resolveReadContextId("notion:page-1#section")).toBeNull();
+    expect(resolveReadContextId("skill-context:not-a-real-skill")).toBeNull();
   });
 });

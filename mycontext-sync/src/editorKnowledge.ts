@@ -38,18 +38,24 @@ export const EDITOR_KNOWLEDGE_SOURCES: readonly EditorKnowledgeSource[] = [
 ];
 
 /**
- * kikaku-composition-playbook, kikaku-db-catalog, and the kikaku-fulltext-* family are Editor
- * Knowledge documents (not Business Knowledge), but they need the "document + section table +
- * search span" shape that Business Knowledge already has. They are kept in a separate source
- * list from EDITOR_KNOWLEDGE_SOURCES (which stays a fixed 8-document, non-sectioned allowlist)
- * and are loaded through loadEditorKnowledgeSectionedDocument below, which reuses the Business
- * Knowledge parsers/validators unchanged. kikaku-fulltext-* is an open-ended family (one
- * document per split of the full-text collection) rather than a single fixed ID, so it is
- * modeled as a template literal type instead of a third literal alternative.
+ * kikaku-composition-playbook, henshu-editing-playbook, kikaku-db-catalog,
+ * knowhow-media-design, and the kikaku-fulltext-* family are Editor Knowledge documents
+ * (not Business Knowledge). Most use the "document + section table + search span" shape that
+ * Business Knowledge already has. The two compact playbooks
+ * (henshu-editing-playbook and knowhow-media-design) intentionally stay as one whole-document
+ * record and do not create editor_knowledge_sections rows.
+ * They are kept in a separate source list from EDITOR_KNOWLEDGE_SOURCES (which stays a fixed
+ * 8-document, non-sectioned allowlist) and are loaded through
+ * loadEditorKnowledgeSectionedDocument below, which reuses the Business Knowledge
+ * parsers/validators unchanged. kikaku-fulltext-* is an open-ended family (one document per
+ * split of the full-text collection) rather than a single fixed ID, so it is modeled as a
+ * template literal type instead of a literal alternative.
  */
 export type EditorKnowledgeSectionedDocumentId =
   | "kikaku-composition-playbook"
+  | "henshu-editing-playbook"
   | "kikaku-db-catalog"
+  | "knowhow-media-design"
   | `kikaku-fulltext-${string}`;
 
 export interface EditorKnowledgeSectionedSource {
@@ -74,8 +80,24 @@ export function isEditorKnowledgeSectionedDocumentId(
   value: string
 ): value is EditorKnowledgeSectionedDocumentId {
   return value === "kikaku-composition-playbook"
+    || value === "henshu-editing-playbook"
     || value === "kikaku-db-catalog"
+    || value === "knowhow-media-design"
     || value.startsWith("kikaku-fulltext-");
+}
+
+export const EDITOR_KNOWLEDGE_WHOLE_DOCUMENT_IDS = [
+  "henshu-editing-playbook",
+  "knowhow-media-design"
+] as const satisfies readonly EditorKnowledgeSectionedDocumentId[];
+
+export type EditorKnowledgeWholeDocumentId =
+  typeof EDITOR_KNOWLEDGE_WHOLE_DOCUMENT_IDS[number];
+
+export function isEditorKnowledgeWholeDocumentId(
+  value: string
+): value is EditorKnowledgeWholeDocumentId {
+  return EDITOR_KNOWLEDGE_WHOLE_DOCUMENT_IDS.some((documentId) => documentId === value);
 }
 
 export type EditorKnowledgeContentLayer = "summary" | "detail" | "index";
@@ -108,6 +130,7 @@ export interface LoadedEditorKnowledgeSectionedDocument {
   documentId: EditorKnowledgeSectionedDocumentId;
   title: string;
   sourcePathKey: string;
+  storageMode: "whole_document" | "sectioned";
   markdown: string;
   markdownSha256: string;
   sectionRevisionSha256: string;
@@ -220,6 +243,24 @@ export function parseEditorKnowledgeSectionedMarkdown(
   const normalizedForParsing = markdown.replace(/\r\n/g, "\n");
   const lines = splitContentLines(normalizedForParsing);
   const markdownSha256 = sha256(markdown);
+
+  if (isEditorKnowledgeWholeDocumentId(documentId)) {
+    assertStorageLimits(markdown, []);
+    return {
+      documentId,
+      title,
+      sourcePathKey,
+      storageMode: "whole_document",
+      markdown,
+      markdownSha256,
+      // The whole Markdown row is the active revision. No independent section revision exists.
+      sectionRevisionSha256: markdownSha256,
+      sectionCount: 0,
+      searchSpanCount: 0,
+      sections: []
+    };
+  }
+
   const sectionRevisionSha256 = sha256(
     `${markdownSha256}\0${BUSINESS_KNOWLEDGE_PARSER_VERSION}\0${BUSINESS_KNOWLEDGE_SECTIONING_VERSION}`
   );
@@ -245,6 +286,7 @@ export function parseEditorKnowledgeSectionedMarkdown(
     documentId,
     title,
     sourcePathKey,
+    storageMode: "sectioned",
     markdown,
     markdownSha256,
     sectionRevisionSha256,

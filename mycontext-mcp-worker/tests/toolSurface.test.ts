@@ -19,6 +19,10 @@ describe("public MCP tool surface", () => {
       expect(tools.tools.map((tool) => tool.name)).toEqual([
         "search_personal_context",
         "read_context",
+        "get_planning_playbook_context",
+        "get_editing_playbook_context",
+        "get_media_playbook_context",
+        "get_analysis_skill_context",
         "get_author_style_context",
         "search_author_style_evidence",
         "get_metaskill_context",
@@ -33,6 +37,7 @@ describe("public MCP tool surface", () => {
       ]));
       expect(tools.tools.find((tool) => tool.name === "search_personal_context"))
         .toMatchObject({
+          description: expect.stringContaining("call get_analysis_skill_context first"),
           inputSchema: {
             properties: {
               query: { maxLength: 300 },
@@ -44,6 +49,43 @@ describe("public MCP tool surface", () => {
         .toMatchObject({
           inputSchema: {
             required: expect.arrayContaining(["id"])
+          }
+        });
+      expect(tools.tools.find((tool) => tool.name === "get_planning_playbook_context"))
+        .toMatchObject({
+          description: expect.stringContaining("Use this first"),
+          inputSchema: {
+            properties: {}
+          }
+        });
+      expect(tools.tools.find((tool) => tool.name === "get_editing_playbook_context"))
+        .toMatchObject({
+          description: expect.stringContaining("Use this first"),
+          inputSchema: {
+            properties: {}
+          }
+        });
+      expect(tools.tools.find((tool) => tool.name === "get_media_playbook_context"))
+        .toMatchObject({
+          description: expect.stringContaining("single TiDB record"),
+          inputSchema: {
+            properties: {}
+          }
+        });
+      expect(tools.tools.find((tool) => tool.name === "get_analysis_skill_context"))
+        .toMatchObject({
+          description: expect.stringContaining("lean canvas使って"),
+          inputSchema: {
+            required: ["skillId"],
+            properties: {
+              skillId: {
+                enum: expect.arrayContaining([
+                  "marketing-lean-canvas",
+                  "resolution-diagnose",
+                  "issue-driven-identify"
+                ])
+              }
+            }
           }
         });
     } finally {

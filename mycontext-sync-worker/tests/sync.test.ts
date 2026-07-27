@@ -70,10 +70,12 @@ describe("Notion-managed context synchronization", () => {
     }));
     expect(notion.updateWorkflow).toHaveBeenNthCalledWith(1, pageId, {
       status: "Syncing",
+      tidbTables: ["notion_pages"],
       validationError: null
     });
     expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
       status: "Synced",
+      tidbTables: ["notion_pages"],
       syncedHash: syncFingerprint(managedDocument(), "# Profile\n\nBody"),
       lastSyncedAt: now.toISOString()
     }));
@@ -108,6 +110,9 @@ describe("Notion-managed context synchronization", () => {
       pageId,
       title: "resolution-diagnose: 解像度診断"
     }));
+    expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
+      tidbTables: ["notion_pages"]
+    }));
   });
 
   it("keeps a Metaskill snapshot read-only when someone sets it Ready", async () => {
@@ -127,7 +132,12 @@ describe("Notion-managed context synchronization", () => {
     expect(result).toMatchObject({ status: "failed", reason: "metaskill_snapshot_read_only" });
     expect(repository.syncNotionPage).not.toHaveBeenCalled();
     expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
-      status: "Conflict"
+      status: "Conflict",
+      tidbTables: [
+        "metaskill_documents",
+        "metaskill_revisions",
+        "metaskill_sections"
+      ]
     }));
   });
 
@@ -320,6 +330,42 @@ describe("Notion-managed context synchronization", () => {
     }));
   });
 
+  it("ignores rotating signatures on the same Notion-hosted image", async () => {
+    const first = [
+      "# Profile",
+      "",
+      "![Desk](https://prod-files-secure.s3.us-west-2.amazonaws.com/workspace/file/desk.jpg?X-Amz-Date=20260726T010000Z&X-Amz-Signature=first)"
+    ].join("\n");
+    const second = [
+      "# Profile",
+      "",
+      "![Desk](https://prod-files-secure.s3.us-west-2.amazonaws.com/workspace/file/desk.jpg?X-Amz-Date=20260726T010001Z&X-Amz-Signature=second)"
+    ].join("\n");
+    vi.mocked(notion.getMarkdown)
+      .mockResolvedValueOnce(markdown(first))
+      .mockResolvedValueOnce(markdown(second));
+
+    const result = await processSyncMessage(message("page.properties_updated"), {
+      notion,
+      repository
+    });
+
+    expect(result).toMatchObject({ status: "synced" });
+    expect(syncFingerprint(managedDocument(), first))
+      .toBe(syncFingerprint(managedDocument(), second));
+    expect(repository.syncNotionPage).toHaveBeenCalledWith(expect.objectContaining({
+      markdown: second
+    }));
+  });
+
+  it("still detects a different Notion-hosted image object", () => {
+    const first = "![Desk](https://prod-files-secure.s3.us-west-2.amazonaws.com/workspace/file/desk.jpg?X-Amz-Signature=first)";
+    const second = "![Desk](https://prod-files-secure.s3.us-west-2.amazonaws.com/workspace/file/other.jpg?X-Amz-Signature=second)";
+
+    expect(syncFingerprint(managedDocument(), first))
+      .not.toBe(syncFingerprint(managedDocument(), second));
+  });
+
   it("keeps the active revision when Notion Markdown is incomplete", async () => {
     vi.mocked(notion.getMarkdown).mockResolvedValue({
       markdown: "# Partial",
@@ -482,6 +528,66 @@ describe("Notion-managed context synchronization", () => {
         sectioningVersion: "section-first-v1",
         routingVersion: null
       });
+    });
+
+    it("syncs a Ready knowhow-media-design page as one whole-document record", async () => {
+      currentManaged = managedDocument({
+        documentId: "knowhow-media-design",
+        name: "メディア設計・運営プレイブック",
+        category: "Editor Knowledge",
+        schemaVersion: "editor-knowledge-v1"
+      });
+      vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(KIKAKU_PLAYBOOK_MARKDOWN));
+
+      const result = await processSyncMessage(message("page.properties_updated"), {
+        notion,
+        repository,
+        now: () => now
+      });
+
+      expect(result).toMatchObject({ status: "synced", documentId: "knowhow-media-design" });
+      const activated = vi.mocked(repository.activateEditorKnowledgeSectioned).mock.calls[0]?.[0];
+      expect(activated?.document).toMatchObject({
+        documentId: "knowhow-media-design",
+        storageMode: "whole_document",
+        sectionCount: 0,
+        searchSpanCount: 0,
+        sections: []
+      });
+      expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
+        status: "Synced",
+        tidbTables: ["editor_knowledge_documents"]
+      }));
+    });
+
+    it("syncs henshu-editing-playbook through the same whole-document path", async () => {
+      currentManaged = managedDocument({
+        documentId: "henshu-editing-playbook",
+        name: "編集プレイブック",
+        category: "Editor Knowledge",
+        schemaVersion: "editor-knowledge-v1"
+      });
+      vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(KIKAKU_PLAYBOOK_MARKDOWN));
+
+      const result = await processSyncMessage(message("page.properties_updated"), {
+        notion,
+        repository,
+        now: () => now
+      });
+
+      expect(result).toMatchObject({ status: "synced", documentId: "henshu-editing-playbook" });
+      const activated = vi.mocked(repository.activateEditorKnowledgeSectioned).mock.calls[0]?.[0];
+      expect(activated?.document).toMatchObject({
+        documentId: "henshu-editing-playbook",
+        storageMode: "whole_document",
+        sectionCount: 0,
+        searchSpanCount: 0,
+        sections: []
+      });
+      expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
+        status: "Synced",
+        tidbTables: ["editor_knowledge_documents"]
+      }));
     });
 
     it("syncs a Ready kikaku-db-catalog page, preserving No.N ｜ Title and group headings", async () => {

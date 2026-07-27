@@ -209,7 +209,7 @@ export class TidbSyncRepository implements SyncRepository {
     documentId: string
   ): Promise<EditorKnowledgeSectionedState | null> {
     const rows = await this.execute(
-      `SELECT section_revision_sha256
+      `SELECT COALESCE(section_revision_sha256, markdown_sha256) AS active_revision_sha256
        FROM editor_knowledge_documents
        WHERE document_id = ?
        LIMIT 1`,
@@ -217,7 +217,7 @@ export class TidbSyncRepository implements SyncRepository {
     );
     if (rows[0] === undefined) return null;
     return {
-      activeSectionRevisionSha256: optionalString(record(rows[0]).section_revision_sha256)
+      activeSectionRevisionSha256: optionalString(record(rows[0]).active_revision_sha256)
     };
   }
 
@@ -226,6 +226,7 @@ export class TidbSyncRepository implements SyncRepository {
   }): Promise<void> {
     const tx = await this.connection.begin();
     try {
+      const wholeDocument = input.document.storageMode === "whole_document";
       await tx.execute(
         `INSERT INTO editor_knowledge_documents
           (document_id, title, markdown, markdown_sha256,
@@ -244,14 +245,23 @@ export class TidbSyncRepository implements SyncRepository {
           input.document.title,
           input.document.markdown,
           input.document.markdownSha256,
-          input.document.sectionRevisionSha256,
-          input.document.sectionCount,
-          input.document.searchSpanCount
+          wholeDocument ? null : input.document.sectionRevisionSha256,
+          wholeDocument ? null : input.document.sectionCount,
+          wholeDocument ? null : input.document.searchSpanCount
         ]
       );
 
-      for (const section of input.document.sections) {
-        await upsertEditorKnowledgeSection(tx, section);
+      if (wholeDocument) {
+        // A compact playbook is one TiDB content record. Remove any chapter rows left by the
+        // former sectioned design so MCP search cannot return stale #chapter-* IDs.
+        await tx.execute(
+          "DELETE FROM editor_knowledge_sections WHERE document_id = ?",
+          [input.document.documentId]
+        );
+      } else {
+        for (const section of input.document.sections) {
+          await upsertEditorKnowledgeSection(tx, section);
+        }
       }
       await tx.commit();
     } catch (error) {

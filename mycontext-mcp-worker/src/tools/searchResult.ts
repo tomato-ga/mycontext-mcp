@@ -4,26 +4,56 @@ import type { SearchContextHit } from "../tidb.js";
 const MAX_SNIPPET_LENGTH = 600;
 
 export function buildSearchToolResult(hits: SearchContextHit[]): CallToolResult {
-  const results = hits.map((hit) => ({
-    id: stableResultId(hit),
-    title: hit.delivery_section_title ?? hit.title ?? hit.document_id,
-    documentId: hit.document_id,
-    source: hit.source,
-    snippet: excerpt(hit.text, hit.match_position, MAX_SNIPPET_LENGTH),
-    matchedTerms: hit.matched_terms,
-    score: hit.score,
-    searchStage: hit.search_stage
-  }));
+  const renderedResults = hits.map((hit) => {
+    const isCompleteExactContext =
+      hit.text.length <= 24_000 &&
+      (
+        hit.search_stage === "intent" ||
+        (
+          hit.search_stage === "phrase" &&
+          hit.delivery_section_id === undefined
+        )
+      );
+    return {
+      result: {
+        id: stableResultId(hit),
+        title: hit.delivery_section_title ?? hit.title ?? hit.document_id,
+        documentId: hit.document_id,
+        source: hit.source,
+        snippet: excerpt(hit.text, hit.match_position, MAX_SNIPPET_LENGTH),
+        matchedTerms: hit.matched_terms,
+        score: hit.score,
+        searchStage: hit.search_stage,
+        ...(isCompleteExactContext
+          ? {
+              contextChars: hit.text.length,
+              retrievalMode: hit.source === "skill_context"
+                ? "full_skill_and_reference"
+                : "full_exact_document",
+              truncated: false
+            }
+          : {})
+      },
+      fullText: isCompleteExactContext ? hit.text : null
+    };
+  });
+  const results = renderedResults.map(({ result }) => result);
   const output = { results };
   const text = results.length === 0
     ? "No synced personal context matched this question."
     : [
         `Found ${results.length} personal-context result(s).`,
-        ...results.map((result, index) => [
+        ...renderedResults.map(({ result, fullText }, index) => [
           `${index + 1}. ${result.title}`,
           `id: ${result.id}`,
           `matched: ${result.matchedTerms.join(", ") || "(fallback match)"}`,
-          result.snippet
+          ...(fullText === null
+            ? [result.snippet]
+            : [
+                `contextChars: ${fullText.length}`,
+                "truncated: false",
+                fullText
+              ])
         ].join("\n"))
       ].join("\n\n");
   return {

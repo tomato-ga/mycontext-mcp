@@ -18,6 +18,17 @@ export type SyncCategory =
   | "Editor Knowledge"
   | "Metaskill";
 
+export type TidbTableName =
+  | "notion_pages"
+  | "author_style_documents"
+  | "author_style_revisions"
+  | "author_style_sections"
+  | "editor_knowledge_documents"
+  | "editor_knowledge_sections"
+  | "metaskill_documents"
+  | "metaskill_revisions"
+  | "metaskill_sections";
+
 export interface ManagedNotionDocument {
   pageId: string;
   dataSourceId: string;
@@ -42,6 +53,7 @@ export interface NotionMarkdown {
 
 export interface WorkflowUpdate {
   status: WorkflowStatus;
+  tidbTables?: readonly TidbTableName[];
   syncedHash?: string | null;
   activeRevision?: string | null;
   validationError?: string | null;

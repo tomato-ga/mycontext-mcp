@@ -230,7 +230,11 @@ export function extractSearchTerms(
     if (expanded.some((term) =>
       term !== part &&
       term.includes(part) &&
-      !/[ぁ-ん]/u.test(term)
+      !/[ぁ-ん]/u.test(term) &&
+      (
+        term.length - part.length <= 2 ||
+        /^[A-Za-z0-9]+$/u.test(part)
+      )
     )) {
       continue;
     }

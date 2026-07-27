@@ -96,6 +96,7 @@ describe("keyword fallback SQL", () => {
     expect(sql).toContain("matched_sections.retrieval_text LIKE ?");
     expect(sql).toContain("documents.markdown LIKE ?");
     expect(sql).toContain("documents.title LIKE ?");
+    expect(sql).toContain("THEN 5 ELSE 0 END");
     expect(sql).toContain("ORDER BY search_score DESC");
     expect(sql).toContain("LIMIT 5");
     expect(sql).not.toContain("VEC_COSINE_DISTANCE");
@@ -560,6 +561,66 @@ describe("natural-language search fallback", () => {
       ["収益化", "事業化", "マネタイズ", "収益"]
     ]
   };
+
+  it("routes the exact ChatGPT media-playbook prompt to one canonical document", async () => {
+    const execute = vi.fn().mockResolvedValueOnce([{
+      document_id: "editor-knowledge:knowhow-media-design",
+      source: "editor_knowledge",
+      source_id: "knowhow-media-design",
+      title: "メディア運営プレイブック",
+      markdown: "# メディア運営プレイブック\n\n全文",
+      markdown_sha256: "f".repeat(64),
+      source_truncated: 0,
+      unknown_block_ids: "[]",
+      last_synced_at: null
+    }]);
+    const client: TidbClient = { execute };
+
+    await expect(searchContext(
+      client,
+      "MCPこれのmedia playbook 読み込んでみて",
+      5
+    )).resolves.toEqual([expect.objectContaining({
+      document_id: "editor-knowledge:knowhow-media-design",
+      title: "メディア運営プレイブック",
+      text: "# メディア運営プレイブック\n\n全文",
+      matched_terms: ["メディア運営プレイブック"],
+      score: 1000,
+      search_stage: "intent",
+      resource_uri: "mycontext://editor-knowledge/knowhow-media-design"
+    })]);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("WHERE document_id = ?"), [
+      "editor-knowledge:knowhow-media-design"
+    ]);
+  });
+
+  it("routes distinctive editor-training queries before generic ranking", async () => {
+    const execute = vi.fn().mockResolvedValueOnce([{
+      document_id: "editor-knowledge:lesson-06",
+      source: "editor_knowledge",
+      source_id: "lesson-06",
+      title: "第6回: 編集会議",
+      markdown: "# 第6回: 編集会議\n\n全文",
+      markdown_sha256: "lesson-06-sha",
+      source_truncated: false,
+      last_synced_at: "2026-07-09T22:54:48.786Z"
+    }]);
+    const client: TidbClient = { execute };
+
+    await expect(searchContext(
+      client,
+      "企画を検討する編集会議の進行方法を知りたい",
+      5
+    )).resolves.toEqual([expect.objectContaining({
+      document_id: "editor-knowledge:lesson-06",
+      matched_terms: ["第6回: 編集会議"],
+      score: 1000,
+      search_stage: "intent",
+      resource_uri: "mycontext://editor-knowledge/lesson-06"
+    })]);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
 
   it("falls back from an absent full phrase to ranked keyword search", async () => {
     const execute = vi.fn()

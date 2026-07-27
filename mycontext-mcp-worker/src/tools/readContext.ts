@@ -15,6 +15,11 @@ import {
   getEditorKnowledgeSection,
   type TidbClient
 } from "../tidb.js";
+import {
+  getSkillContextDocument,
+  SKILL_CONTEXT_IDS,
+  type SkillContextId
+} from "../skillContext.js";
 
 const DEFAULT_MAX_CHARS = 6_000;
 const MAX_CHARS = 12_000;
@@ -38,6 +43,7 @@ const inputSchema = {
 
 export type ReadContextTarget =
   | { kind: "document"; id: string }
+  | { kind: "skill-context"; id: string; skillId: SkillContextId }
   | { kind: "section"; id: string; documentId: string; sectionId: string };
 
 export function registerReadContextTool(server: McpServer, client: TidbClient): void {
@@ -68,6 +74,34 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
         };
       }
 
+      if (target.kind === "skill-context") {
+        const context = await getSkillContextDocument(client, target.skillId);
+        if (context === null) {
+          return {
+            isError: true,
+            content: [{ type: "text" as const, text: `Context not found: ${target.id}` }]
+          };
+        }
+        return {
+          content: [{ type: "text" as const, text: context.markdown }],
+          structuredContent: {
+            context: {
+              id: target.id,
+              skillId: context.skill_id,
+              title: context.title,
+              source: "skill_context",
+              contextChars: context.context_chars,
+              returnedChars: context.markdown.length,
+              markdownSha256: context.markdown_sha256,
+              mergeVersion: context.merge_version,
+              lastSyncedAt: context.last_synced_at,
+              retrievalMode: "full_skill_and_reference",
+              truncatedOutput: false
+            }
+          }
+        };
+      }
+
       if (target.kind === "section") {
         // The section-reference regex only matches "business-knowledge:...#..." or
         // "editor-knowledge:...#...", so this prefix check is sufficient to route to the
@@ -95,6 +129,8 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
                 sourceLineEnd: section.source_line_end,
                 relatedSourcePath: section.related_source_path,
                 freshnessClass: section.freshness_class,
+                contextChars: section.markdown.length,
+                returnedChars: markdown.length,
                 truncatedOutput: markdown.length < section.markdown.length
               }
             }
@@ -131,6 +167,8 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
               ingestScope: section.ingest_scope,
               sourceDeclaredAt: section.source_declared_at,
               detailAvailable: section.detail_available,
+              contextChars: section.markdown.length,
+              returnedChars: markdown.length,
               truncatedOutput: markdown.length < section.markdown.length
             }
           }
@@ -160,6 +198,8 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
             detailAvailable: document.detail_available,
             sourceTruncated: document.source_truncated,
             lastSyncedAt: document.last_synced_at,
+            contextChars: document.markdown.length,
+            returnedChars: markdown.length,
             truncatedOutput: markdown.length < document.markdown.length
           }
         }
@@ -169,6 +209,18 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
 }
 
 export function resolveReadContextId(id: string): ReadContextTarget | null {
+  if (id.startsWith("skill-context:")) {
+    const skillId = id.slice("skill-context:".length);
+    if (SKILL_CONTEXT_IDS.some((candidate) => candidate === skillId)) {
+      return {
+        kind: "skill-context",
+        id,
+        skillId: skillId as SkillContextId
+      };
+    }
+    return null;
+  }
+
   const parsedBusinessSection = parseBusinessKnowledgeSectionReference(id);
   if (parsedBusinessSection !== null) {
     return {

@@ -29,11 +29,12 @@ Webhookは`page.properties_updated`と`page.content_updated`だけをQueueへ送
 | --- | --- | --- |
 | `Name` | Title | 人間向け文書名 |
 | `Document ID` | Rich text | 固定・重複禁止 |
-| `Category` | Select | `Personal Context` / `AI Skill` / `Author Style` / `Metaskill` |
+| `Category` | Select | `Personal Context` / `AI Skill` / `Author Style` / `Editor Knowledge` / `Metaskill` |
 | `Status` | Status | `Draft` / `Review` / `Ready` / `Syncing` / `Synced` / `Error` / `Conflict` / `Archived` |
 | `Active` | Checkbox | 同期対象ならon |
-| `Schema Version` | Select | `personal-context-v1` / `ai-skill-v1` / `author-style-v1` / `metaskill-v1` |
+| `Schema Version` | Select | `personal-context-v1` / `ai-skill-v1` / `author-style-v1` / `editor-knowledge-v1` / `metaskill-v1` |
 | `Sync Source` | Select | 通常は`Notion`。TiDB管理のMetaskillスナップショットだけ`TiDB` |
+| `TiDB Tables` | Multi-select | Worker管理。実際のTiDB保存先table |
 | `Last Synced` | Date | Worker管理 |
 | `Synced Hash` | Rich text | Worker管理 |
 | `Active Revision` | Rich text | Worker管理 |
@@ -46,9 +47,20 @@ Webhookは`page.properties_updated`と`page.content_updated`だけをQueueへ送
 
 ## 対応する保存先
 
+`TiDB Tables`は人間の入力値ではなく、`Schema Version`から決まるWorker管理の派生メタデータです。同期fingerprintには含めません。Workerは`Syncing`、`Synced`、`Error`、`Conflict`へ更新するときに、次の対応表をNotionへ書き戻します。既存データで`Category`と`Schema Version`が食い違う場合も実保存モデルを正しく示せるよう、`Schema Version`を第一キーとし、未知のversionだけ`Category`をフォールバックに使います。
+
+| Schema Version | `TiDB Tables` |
+| --- | --- |
+| `personal-context-v1` | `notion_pages` |
+| `ai-skill-v1` | `notion_pages` |
+| `author-style-v1` | `author_style_documents`, `author_style_revisions`, `author_style_sections` |
+| `editor-knowledge-v1` | 原則: `editor_knowledge_documents`, `editor_knowledge_sections` |
+| `metaskill-v1` | `metaskill_documents`, `metaskill_revisions`, `metaskill_sections` |
+
 - `Personal Context`: 既存`notion_pages`へ全文Markdownを保存する。`Original Page ID`の行があれば主キーを新しいNotionページIDへ移すため、複製レコードは作らない。
 - `AI Skill`: 再利用可能なAI実行手順を、スキルごとに既存`notion_pages`へ全文Markdownとして保存する。
 - `Author Style`: `ore-title-style`または`ore-body-style`だけを既存のrevision/section/routing parserで検証し、3つのauthor-style tableへ保存する。
+- `Editor Knowledge`: 企画・編集ノウハウを検証して保存する。`henshu-editing-playbook`と`knowhow-media-design`は全文1レコード方式のため`editor_knowledge_documents`だけを使い、旧section行も同期時に削除する。それ以外は2つのeditor-knowledge tableへsection化して保存する。
 - `Metaskill`: 専用`metaskill_*` tableのactive revisionを示す管理用スナップショット。TiDBを正本とし、Notionから`Ready`にして再同期することはできない。
 
 MyContext Documentsに複製した6文書はすべてNotionを正本とします。ローカルMarkdownはWorkerの入力にも、初回移行の判定にも使いません。

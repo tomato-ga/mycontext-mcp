@@ -1,6 +1,7 @@
 import type { Connection, Tx } from "@tidbcloud/serverless";
 import { describe, expect, it, vi } from "vitest";
 import type { LoadedAuthorStyleDocument } from "../../mycontext-sync/src/authorStyle.js";
+import { parseEditorKnowledgeSectionedMarkdown } from "../../mycontext-sync/src/editorKnowledge.js";
 import { TidbSyncRepository } from "../src/tidb.js";
 import type { AuthorStyleState } from "../src/types.js";
 import type { SyncStateLogEntry } from "../src/types.js";
@@ -109,6 +110,37 @@ describe("TiDB sync writer", () => {
     })).rejects.toMatchObject({ code: "author_style_concurrent_update", retryable: false });
     expect(tx.rollback).toHaveBeenCalledOnce();
     expect(tx.commit).not.toHaveBeenCalled();
+  });
+
+  it("stores a compact playbook in the document row and removes former chapter rows", async () => {
+    const tx = transaction([]);
+    const repository = new TidbSyncRepository("unused", connection(tx));
+    const document = parseEditorKnowledgeSectionedMarkdown({
+      documentId: "knowhow-media-design",
+      sourcePathKey: "notion:media",
+      markdown: "# メディア運営プレイブック\n\n## 1. 方針\n本文"
+    });
+
+    await repository.activateEditorKnowledgeSectioned({ document });
+
+    const calls = vi.mocked(tx.execute).mock.calls;
+    const upsert = calls.find(([sql]) => String(sql).includes("INSERT INTO editor_knowledge_documents"));
+    expect(upsert?.[1]).toEqual([
+      "knowhow-media-design",
+      "メディア運営プレイブック",
+      document.markdown,
+      document.markdownSha256,
+      null,
+      null,
+      null
+    ]);
+    expect(calls).toEqual(expect.arrayContaining([[
+      expect.stringContaining("DELETE FROM editor_knowledge_sections"),
+      ["knowhow-media-design"]
+    ]]));
+    expect(calls.some(([sql]) => String(sql).includes("INSERT INTO editor_knowledge_sections")))
+      .toBe(false);
+    expect(tx.commit).toHaveBeenCalledOnce();
   });
 });
 

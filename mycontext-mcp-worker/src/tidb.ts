@@ -9,6 +9,16 @@ import {
   type AuthorStyleSelectors
 } from "./authorStyle.js";
 import { buildBusinessKnowledgeSectionUri } from "./businessKnowledge.js";
+import {
+  buildEditingPlaybookResourceUri,
+  EDITING_PLAYBOOK_DOCUMENT_ID,
+  EDITING_PLAYBOOK_SOURCE_ID,
+  EditingPlaybookContextError,
+  EditingPlaybookContextTooLargeError,
+  MAX_EDITING_PLAYBOOK_CONTEXT_CHARS,
+  type EditingPlaybookContext
+} from "./editingPlaybook.js";
+import { resolveEditorTrainingSearchIntent } from "./editorTrainingSearchIntent.js";
 import { buildEditorKnowledgeSectionUri } from "./editorKnowledge.js";
 import {
   MetaskillContextTooLargeError,
@@ -21,13 +31,38 @@ import {
   type MetaskillSelectors
 } from "./metaskill.js";
 import {
+  buildMediaPlaybookResourceUri,
+  MAX_MEDIA_PLAYBOOK_CONTEXT_CHARS,
+  MEDIA_PLAYBOOK_DOCUMENT_ID,
+  MEDIA_PLAYBOOK_SOURCE_ID,
+  MediaPlaybookContextError,
+  MediaPlaybookContextTooLargeError,
+  type MediaPlaybookContext
+} from "./mediaPlaybook.js";
+import {
   buildSearchQueryPlan,
   normalizeSearchText,
   EMPTY_PERSONAL_SYNONYM_CONFIG,
   type PersonalSynonymConfig
 } from "./searchQuery.js";
+import { getSkillContextDocument } from "./skillContext.js";
+import { resolveSkillContextSearchIntent } from "./skillContextSearchIntent.js";
+import {
+  buildPlanningPlaybookResourceUri,
+  MAX_PLANNING_PLAYBOOK_CONTEXT_CHARS,
+  PLANNING_PLAYBOOK_DOCUMENT_ID,
+  PLANNING_PLAYBOOK_SOURCE_ID,
+  PlanningPlaybookContextError,
+  PlanningPlaybookContextTooLargeError,
+  type PlanningPlaybookContext
+} from "./planningPlaybook.js";
+import { resolvePlaybookSearchIntent } from "./playbookSearchIntent.js";
 
-export type DocumentSource = "notion" | "editor_knowledge" | "business_knowledge";
+export type DocumentSource =
+  | "notion"
+  | "editor_knowledge"
+  | "business_knowledge"
+  | "skill_context";
 
 export interface ListedDocument {
   document_id: string;
@@ -54,7 +89,7 @@ export interface SearchContextHit {
   match_position: number;
   matched_terms: string[];
   score: number;
-  search_stage: "phrase" | "keywords" | "synonyms";
+  search_stage: "intent" | "phrase" | "keywords" | "synonyms";
   matched_span_position?: number;
   matched_section_id?: string;
   matched_section_title?: string;
@@ -423,6 +458,42 @@ export async function searchContext(
   personalSynonyms: PersonalSynonymConfig = EMPTY_PERSONAL_SYNONYM_CONFIG
 ): Promise<SearchContextHit[]> {
   const limitedTopK = validateTopK(topK);
+  const skillIntent = resolveSkillContextSearchIntent(query);
+  if (skillIntent !== null) {
+    const skillContext = await getSkillContextDocument(client, skillIntent.skillId);
+    if (skillContext !== null) {
+      return [{
+        document_id: skillIntent.documentId,
+        source: "skill_context",
+        title: skillContext.title,
+        text: skillContext.markdown,
+        match_position: 1,
+        matched_terms: [skillIntent.skillId],
+        score: 1000,
+        search_stage: "intent",
+        resource_uri: skillIntent.resourceUri
+      }];
+    }
+  }
+  const canonicalIntent =
+    resolvePlaybookSearchIntent(query) ??
+    resolveEditorTrainingSearchIntent(query);
+  if (canonicalIntent !== null) {
+    const document = await getDocument(client, canonicalIntent.documentId);
+    if (document !== null) {
+      return [{
+        document_id: document.document_id,
+        source: document.source,
+        title: document.title,
+        text: document.markdown,
+        match_position: 1,
+        matched_terms: [canonicalIntent.canonicalTitle],
+        score: 1000,
+        search_stage: "intent",
+        resource_uri: canonicalIntent.resourceUri
+      }];
+    }
+  }
   const plan = buildSearchQueryPlan(query, personalSynonyms);
   const likePattern = buildLikePattern(plan.phrase);
   const phraseRows = await client.execute(
@@ -530,6 +601,226 @@ export async function getDocument(client: TidbClient, documentId: string): Promi
     source_truncated: parseBoolean(row.source_truncated, "source_truncated"),
     unknown_block_ids: parseStringArray(row.unknown_block_ids, "unknown_block_ids"),
     last_synced_at: dateToIsoString(row.last_synced_at)
+  };
+}
+
+export async function getPlanningPlaybookContext(
+  client: TidbClient
+): Promise<PlanningPlaybookContext | null> {
+  const rows = await client.execute(
+    `SELECT
+        document_id,
+        title,
+        markdown,
+        markdown_sha256,
+        section_revision_sha256,
+        section_count,
+        search_span_count,
+        last_synced_at
+      FROM editor_knowledge_documents
+      WHERE document_id = ?
+      LIMIT 1`,
+    [PLANNING_PLAYBOOK_SOURCE_ID]
+  );
+
+  const row = rows[0];
+  if (row === undefined) {
+    return null;
+  }
+
+  try {
+    const documentId = parseRequiredString(row.document_id, "document_id");
+    if (documentId !== PLANNING_PLAYBOOK_SOURCE_ID) {
+      throw new PlanningPlaybookContextError(
+        `planning playbook document_id must be ${PLANNING_PLAYBOOK_SOURCE_ID}`
+      );
+    }
+    const markdown = parseRequiredString(row.markdown, "markdown");
+    if (markdown.length > MAX_PLANNING_PLAYBOOK_CONTEXT_CHARS) {
+      throw new PlanningPlaybookContextTooLargeError(
+        markdown.length,
+        MAX_PLANNING_PLAYBOOK_CONTEXT_CHARS
+      );
+    }
+    const revisionSha256 = parseRequiredString(
+      row.section_revision_sha256,
+      "section_revision_sha256"
+    );
+    const sectionCount = parseNumber(row.section_count, "section_count");
+    const searchSpanCount = parseNumber(row.search_span_count, "search_span_count");
+    if (!Number.isInteger(sectionCount) || sectionCount < 1) {
+      throw new PlanningPlaybookContextError("planning playbook section_count must be positive");
+    }
+    if (searchSpanCount !== sectionCount) {
+      throw new PlanningPlaybookContextError(
+        `planning playbook must make every chapter searchable: section_count=${sectionCount}, search_span_count=${searchSpanCount}`
+      );
+    }
+
+    return {
+      document_id: PLANNING_PLAYBOOK_DOCUMENT_ID,
+      title: parseRequiredString(row.title, "title"),
+      markdown_sha256: parseRequiredString(row.markdown_sha256, "markdown_sha256"),
+      revision_sha256: revisionSha256,
+      section_count: sectionCount,
+      search_span_count: searchSpanCount,
+      context_chars: markdown.length,
+      retrieval_mode: "full_playbook",
+      truncated: false,
+      last_synced_at: dateToIsoString(row.last_synced_at),
+      source_resource_uri: buildPlanningPlaybookResourceUri(),
+      markdown
+    };
+  } catch (error) {
+    if (
+      error instanceof PlanningPlaybookContextError
+      || error instanceof PlanningPlaybookContextTooLargeError
+    ) {
+      throw error;
+    }
+    throw new PlanningPlaybookContextError(
+      `planning playbook state is invalid: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+export async function getEditingPlaybookContext(
+  client: TidbClient
+): Promise<EditingPlaybookContext | null> {
+  try {
+    const context = await getWholeDocumentPlaybookContext(client, {
+      sourceId: EDITING_PLAYBOOK_SOURCE_ID,
+      maximumChars: MAX_EDITING_PLAYBOOK_CONTEXT_CHARS,
+      invalidState: (message) => new EditingPlaybookContextError(message),
+      tooLarge: (actual, maximum) =>
+        new EditingPlaybookContextTooLargeError(actual, maximum)
+    });
+    return context === null ? null : {
+      ...context,
+      document_id: EDITING_PLAYBOOK_DOCUMENT_ID,
+      source_resource_uri: buildEditingPlaybookResourceUri()
+    };
+  } catch (error) {
+    if (
+      error instanceof EditingPlaybookContextError
+      || error instanceof EditingPlaybookContextTooLargeError
+    ) {
+      throw error;
+    }
+    throw new EditingPlaybookContextError(
+      `editing playbook state is invalid: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+export async function getMediaPlaybookContext(
+  client: TidbClient
+): Promise<MediaPlaybookContext | null> {
+  try {
+    const context = await getWholeDocumentPlaybookContext(client, {
+      sourceId: MEDIA_PLAYBOOK_SOURCE_ID,
+      maximumChars: MAX_MEDIA_PLAYBOOK_CONTEXT_CHARS,
+      invalidState: (message) => new MediaPlaybookContextError(message),
+      tooLarge: (actual, maximum) =>
+        new MediaPlaybookContextTooLargeError(actual, maximum)
+    });
+    return context === null ? null : {
+      ...context,
+      document_id: MEDIA_PLAYBOOK_DOCUMENT_ID,
+      source_resource_uri: buildMediaPlaybookResourceUri()
+    };
+  } catch (error) {
+    if (
+      error instanceof MediaPlaybookContextError
+      || error instanceof MediaPlaybookContextTooLargeError
+    ) {
+      throw error;
+    }
+    throw new MediaPlaybookContextError(
+      `media playbook state is invalid: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+interface WholeDocumentPlaybookContextRow {
+  title: string;
+  markdown_sha256: string;
+  revision_sha256: string;
+  storage_mode: "whole_document";
+  record_count: 1;
+  section_count: 0;
+  search_span_count: 1;
+  context_chars: number;
+  retrieval_mode: "full_playbook";
+  truncated: false;
+  last_synced_at: string | null;
+  markdown: string;
+}
+
+async function getWholeDocumentPlaybookContext(
+  client: TidbClient,
+  config: {
+    sourceId: string;
+    maximumChars: number;
+    invalidState: (message: string) => Error;
+    tooLarge: (actual: number, maximum: number) => Error;
+  }
+): Promise<WholeDocumentPlaybookContextRow | null> {
+  const rows = await client.execute(
+    `SELECT
+        document_id,
+        title,
+        markdown,
+        markdown_sha256,
+        section_revision_sha256,
+        section_count,
+        search_span_count,
+        last_synced_at
+      FROM editor_knowledge_documents
+      WHERE document_id = ?
+      LIMIT 1`,
+    [config.sourceId]
+  );
+
+  const row = rows[0];
+  if (row === undefined) {
+    return null;
+  }
+
+  const documentId = parseRequiredString(row.document_id, "document_id");
+  if (documentId !== config.sourceId) {
+    throw config.invalidState(
+      `whole-document playbook document_id must be ${config.sourceId}`
+    );
+  }
+  const markdown = parseRequiredString(row.markdown, "markdown");
+  if (markdown.length > config.maximumChars) {
+    throw config.tooLarge(markdown.length, config.maximumChars);
+  }
+  if (
+    row.section_revision_sha256 !== null
+    || row.section_count !== null
+    || row.search_span_count !== null
+  ) {
+    throw config.invalidState(
+      "whole-document playbook must not have section revision/count metadata"
+    );
+  }
+
+  const markdownSha256 = parseRequiredString(row.markdown_sha256, "markdown_sha256");
+  return {
+    title: parseRequiredString(row.title, "title"),
+    markdown_sha256: markdownSha256,
+    revision_sha256: markdownSha256,
+    storage_mode: "whole_document",
+    record_count: 1,
+    section_count: 0,
+    search_span_count: 1,
+    context_chars: markdown.length,
+    retrieval_mode: "full_playbook",
+    truncated: false,
+    last_synced_at: dateToIsoString(row.last_synced_at),
+    markdown
   };
 }
 
@@ -1818,7 +2109,7 @@ export function buildKeywordSearchParams(terms: string[]): string[] {
 
 function buildTermScoreSql(termCount: number, titleColumn: string, textColumn: string): string {
   return Array.from({ length: termCount }, () =>
-    `(CASE WHEN ${titleColumn} LIKE ? ESCAPE '\\\\' THEN 3 ELSE 0 END + ` +
+    `(CASE WHEN ${titleColumn} LIKE ? ESCAPE '\\\\' THEN 5 ELSE 0 END + ` +
     `CASE WHEN ${textColumn} LIKE ? ESCAPE '\\\\' THEN 1 ELSE 0 END)`
   ).join(" + ");
 }

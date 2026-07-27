@@ -36,6 +36,70 @@ describe("parseEditorKnowledgeSectionedMarkdown (text-based, used by mycontext-s
     expect(document.sections[0]).toMatchObject({ sectionId: "chapter-01" });
   });
 
+  it("keeps knowhow-media-design as one whole-document record", () => {
+    const markdown = [
+      "# メディア設計・運営プレイブック",
+      "",
+      "テーマ: メディア設計・運営",
+      "",
+      "## 1. メディアを持つ前に決めること",
+      "第1章の本文。",
+      "",
+      "## 2. 届ける価値とやらないことを決める",
+      "第2章の本文。",
+      ""
+    ].join("\n");
+
+    const document = parseEditorKnowledgeSectionedMarkdown({
+      documentId: "knowhow-media-design",
+      markdown,
+      sourcePathKey: "notion:media-design"
+    });
+
+    expect(document).toMatchObject({
+      documentId: "knowhow-media-design",
+      title: "メディア設計・運営プレイブック",
+      storageMode: "whole_document",
+      sectionCount: 0,
+      searchSpanCount: 0
+    });
+    expect(document.sections).toEqual([]);
+    expect(document.sectionRevisionSha256).toBe(document.markdownSha256);
+    expect(document.markdown).toBe(markdown);
+  });
+
+  it("keeps henshu-editing-playbook as one whole-document record", () => {
+    const markdown = [
+      "# 編集プレイブック",
+      "",
+      "原稿が上がってから公開するまでの編集作業を作業の順番に再編成したもの。",
+      "",
+      "## 1. このプレイブックの使い方",
+      "第1章の本文。",
+      "",
+      "## 2. 編集の原則（判断の土台）",
+      "第2章の本文。",
+      ""
+    ].join("\n");
+
+    const document = parseEditorKnowledgeSectionedMarkdown({
+      documentId: "henshu-editing-playbook",
+      markdown,
+      sourcePathKey: "notion:henshu-editing"
+    });
+
+    expect(document).toMatchObject({
+      documentId: "henshu-editing-playbook",
+      title: "編集プレイブック",
+      storageMode: "whole_document",
+      sectionCount: 0,
+      searchSpanCount: 0
+    });
+    expect(document.sections).toEqual([]);
+    expect(document.sectionRevisionSha256).toBe(document.markdownSha256);
+    expect(document.markdown).toBe(markdown);
+  });
+
   it("produces the exact same result as the file-based loader for identical content", async () => {
     const fixture = await writeKikakuCatalogFixture();
     const fromFile = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);

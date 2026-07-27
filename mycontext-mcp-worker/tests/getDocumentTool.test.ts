@@ -46,6 +46,8 @@ describe("read_context", () => {
           ingestScope: "full_summary",
           sourceDeclaredAt: null,
           detailAvailable: null,
+          contextChars: "## 18. Interview\n\nFull parent section".length,
+          returnedChars: "## 18. Interview\n\nFull parent section".length,
           truncatedOutput: false
         }
       });
@@ -92,6 +94,8 @@ describe("read_context", () => {
           source: "editor_knowledge",
           contentLayer: "detail",
           freshnessClass: "dated_example",
+          contextChars: "### No.1 ｜ 最初の企画\n\n企画1の本文。".length,
+          returnedChars: "### No.1 ｜ 最初の企画\n\n企画1の本文。".length,
           truncatedOutput: false
         }
       });

@@ -20,7 +20,7 @@ import { createTidbClient } from "./tidb.js";
 import { registerPublicTools } from "./tools/register.js";
 
 function createServer(config: AppConfig): McpServer {
-  const server = new McpServer({ name: "mycontext-mcp", version: "0.5.0" });
+  const server = new McpServer({ name: "mycontext-mcp", version: "0.7.0" });
   const client = createTidbClient(config.tidbDatabaseUrl);
 
   registerPublicTools(server, client, config.personalSynonyms);

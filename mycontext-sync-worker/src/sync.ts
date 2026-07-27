@@ -14,6 +14,7 @@ import {
 } from "../../mycontext-sync/src/editorKnowledge.js";
 import { sha256 } from "./hash.js";
 import { SyncStateTrace } from "./stateLog.js";
+import { tidbTablesForDocument } from "./tidbTables.js";
 import {
   SyncFailure,
   type ManagedNotionDocument,
@@ -132,6 +133,7 @@ async function handleReadyPage(
     if (managed.status === "Ready") {
       await dependencies.notion.updateWorkflow(pageId, {
         status: "Syncing",
+        tidbTables: tidbTablesForDocument(managed),
         validationError: null
       });
     }
@@ -255,6 +257,7 @@ async function handleReadyPage(
 
     await dependencies.notion.updateWorkflow(pageId, {
       status: "Synced",
+      tidbTables: tidbTablesForDocument(refreshed),
       syncedHash: secondFingerprint,
       activeRevision: outcome.revisionSha256 ?? secondHash,
       validationError: null,
@@ -273,6 +276,7 @@ async function handleReadyPage(
     if (failure.retryable) throw failure;
     await dependencies.notion.updateWorkflow(pageId, {
       status: failure.workflowStatus,
+      tidbTables: tidbTablesForDocument(managed),
       validationError: `${failure.code}: ${failure.message}`
     });
     await trace.recordFailure(failure);
@@ -491,7 +495,7 @@ function defaultParseEditorKnowledge(input: {
   if (!isEditorKnowledgeSectionedDocumentId(input.managed.documentId)) {
     throw new SyncFailure(
       "editor_knowledge_document_id_invalid",
-      "Editor Knowledge Document ID must be kikaku-composition-playbook, kikaku-db-catalog, or start with kikaku-fulltext-"
+      "Editor Knowledge Document ID must be kikaku-composition-playbook, henshu-editing-playbook, kikaku-db-catalog, knowhow-media-design, or start with kikaku-fulltext-"
     );
   }
   try {
@@ -523,8 +527,15 @@ export function syncFingerprint(
     schemaVersion: managed.schemaVersion,
     syncSource: managed.syncSource,
     originalPageId: managed.originalPageId,
-    markdown
+    markdown: stableMarkdownForFingerprint(markdown)
   }));
+}
+
+function stableMarkdownForFingerprint(markdown: string): string {
+  return markdown.replace(
+    /https:\/\/prod-files-secure\.s3(?:\.[a-z0-9-]+)?\.amazonaws\.com\/[^?\s)]+\?[^\s)]+/gi,
+    (signedUrl) => signedUrl.slice(0, signedUrl.indexOf("?"))
+  );
 }
 
 export function canonicalAuthorStyleMarkdown(

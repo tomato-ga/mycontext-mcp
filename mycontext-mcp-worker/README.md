@@ -21,6 +21,17 @@ endpoint at `/healthz`.
   Worker-side `UNION ALL` read model; author style and Metaskill remain on
   dedicated retrieval paths.
 - Search:
+  - `get_planning_playbook_context` is the mandatory first retrieval path for
+    creating, reviewing, or revising an article plan, heading outline, or body
+    structure. It returns the complete `kikaku-composition-playbook` without
+    truncation. Search is used only afterward for supporting examples or evidence.
+  - `get_editing_playbook_context` is the mirrored first retrieval path for
+    editing a completed draft (red-lining, proofreading, publish/no-publish
+    decisions, post-publication rewrites). It returns the complete
+    `henshu-editing-playbook` from one TiDB record without truncation.
+  - `get_media_playbook_context` is the first retrieval path for media strategy,
+    positioning, operations, KPI, distribution, and monetization. It returns the
+    complete `knowhow-media-design` from one TiDB record without truncation.
   - `search_personal_context`: tries the full normalized phrase first, then
     extracts up to eight Japanese terms for title-weighted OR ranking, and
     finally retries a bounded synonym set. Business knowledge searches the
@@ -48,6 +59,14 @@ does not run migrations, and does not expose a raw SQL tool.
 
 - `search_personal_context`
 - `read_context`
+- `get_planning_playbook_context`: mandatory first path for article planning
+  and structure work; returns the complete planning playbook with no selectors
+  and no truncation. It fails explicitly instead of returning a partial prefix.
+- `get_editing_playbook_context`: mandatory first path for editing a completed
+  draft through to the publish decision and post-publication improvements;
+  single-record, no-truncation contract.
+- `get_media_playbook_context`: mandatory first path for media strategy and
+  operations; same single-record, no-truncation contract as the editing tool.
 - `get_author_style_context`: normal generation/edit/evaluation path; returns
   one selector-specific context pack without truncating semantic sections.
 - `search_author_style_evidence`: audit path over evidence/profile/ops layers;
@@ -62,6 +81,15 @@ General document IDs are namespaced as `notion:<page-id>` and
 Business search results use
 `business-knowledge:<document-id>#<local-section-id>`. `read_context` accepts
 exactly one stable `id` copied from a search result.
+
+`henshu-editing-playbook` and `knowhow-media-design` are compact whole-document
+records. General search returns `editor-knowledge:<document-id>` for each, never
+a `#chapter-*` ID. Their dedicated tools are the full, non-truncated paths.
+
+For article planning and structure work, do not use search to discover the
+playbook. Call `get_planning_playbook_context` first, then use
+`search_personal_context` and `read_context` only for relevant catalog or
+full-text evidence.
 
 ## Resources
 

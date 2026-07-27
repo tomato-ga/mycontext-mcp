@@ -43,7 +43,7 @@ describe("Notion MyContext data source", () => {
     }
   );
 
-  it("writes only workflow metadata back to Notion", async () => {
+  it("writes workflow metadata and TiDB table routing back to Notion", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ object: "page" }), {
       status: 200,
       headers: { "Content-Type": "application/json" }
@@ -55,6 +55,11 @@ describe("Notion MyContext data source", () => {
 
     await client.updateWorkflow(pageId, {
       status: "Synced",
+      tidbTables: [
+        "author_style_documents",
+        "author_style_revisions",
+        "author_style_sections"
+      ],
       syncedHash: "a".repeat(64),
       activeRevision: "b".repeat(64),
       validationError: null,
@@ -65,6 +70,13 @@ describe("Notion MyContext data source", () => {
     const body = JSON.parse(String(init.body)) as { properties: Record<string, unknown> };
     expect(body.properties).toHaveProperty("Status");
     expect(body.properties).toHaveProperty("Synced Hash");
+    expect(body.properties["TiDB Tables"]).toEqual({
+      multi_select: [
+        { name: "author_style_documents" },
+        { name: "author_style_revisions" },
+        { name: "author_style_sections" }
+      ]
+    });
     expect(body.properties).not.toHaveProperty("Name");
     expect(body.properties).not.toHaveProperty("Document ID");
   });

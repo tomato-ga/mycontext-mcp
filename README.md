@@ -207,17 +207,17 @@ Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README
 
 提供 tools:
 
-- `list_documents`: 同期済みNotion / `editor-knowledge` / `business-knowledge`文書一覧を名前空間付きIDで返す。
-- `search_context`: Notion/editor本文とbusinessの最小意味sectionを統合検索する。BusinessのH3ヒットは意味が完結するH2親sectionへ展開して返す。
-- `search_text`: `search_context` と同じ検索を明示的な text fallback として提供する。
-- `get_document`: 従来の`pageId`、名前空間付き`documentId`、またはbusiness `sectionId`で本文/sectionを返す。
-- `health_check`: TiDB接続、各sourceの文書件数、business section件数、合計件数を返す。
+- `search_personal_context`: 同期済みの個人コンテキストを統合検索し、詳細取得用の安定IDと短い候補を返す。
+- `read_context`: `search_personal_context`が返した安定IDの文書または意味sectionを読む。
+- `get_planning_playbook_context`: 企画案・記事構成・H2/H3見出し・本文構成の作成／レビュー／修正で最初に使い、`kikaku-composition-playbook`全文を非省略で返す。その後に必要な事例だけを検索する。
+- `get_editing_playbook_context`: 上がってきた原稿の編集・赤入れ・校正校閲・公開判断・公開後リライトで最初に使い、`henshu-editing-playbook`全文を非省略で返す。企画・構成をゼロから作る場合は`get_planning_playbook_context`を使う。
+- `get_media_playbook_context`: メディア戦略・ポジショニング・運営体制・KPI・流通・収益化で最初に使い、`knowhow-media-design`全文を非省略で返す。
 - `get_author_style_context`: 文書種別・操作・モード・長さ・profileに応じた意味完結sectionを、通常利用向けの1パックとして返す。
 - `search_author_style_evidence`: 根拠確認時だけevidence/profile/ops層を検索し、ヒットした細粒度spanを意味完結sectionへ展開して返す。
 - `get_metaskill_context`: topic・intent・depthに応じた意味完結sectionを、通常利用向けの1パックとして返す。
 - `search_metaskill_evidence`: 用語・例・promptなどを細粒度spanで検索し、ヒットを意味完結sectionへ展開して返す。
 
-Business knowledge、author style、Metaskillは文書Resourceとsection Resource templateも公開します。MetaskillのURIは`mycontext://metaskill/ai-self-strategy`です。
+編集プレイブックとメディア運営プレイブックは、`editor_knowledge_documents`の全文1行をそのまま検索・取得単位とし、章sectionは作りません。一般検索IDはそれぞれ`editor-knowledge:henshu-editing-playbook`、`editor-knowledge:knowhow-media-design`です。Business knowledge、author style、Metaskillは文書Resourceとsection Resource templateも公開します。MetaskillのURIは`mycontext://metaskill/ai-self-strategy`です。
 
 Worker は stateless です。Durable Objects、migrations、raw SQL tool、Notion API 呼び出しはありません。
 

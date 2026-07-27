@@ -92,4 +92,76 @@ describe("buildSearchToolResult", () => {
     expect(result.content[0]).toMatchObject({ type: "text" });
     expect(JSON.stringify(result)).not.toContain("\"type\":\"resource\"");
   });
+
+  it("returns a complete exact-ID analysis skill record through the legacy search tool", () => {
+    const markdown = `# Resolution Diagnose\n\n${"framework ".repeat(1_000)}`;
+    const result = buildSearchToolResult([{
+      document_id: "skill-context:resolution-diagnose",
+      source: "skill_context",
+      title: "resolution-diagnose",
+      text: markdown,
+      match_position: 1,
+      matched_terms: ["resolution-diagnose"],
+      score: 1000,
+      search_stage: "intent"
+    }]);
+    expect(result.structuredContent).toMatchObject({
+      results: [{
+        id: "skill-context:resolution-diagnose",
+        source: "skill_context",
+        contextChars: markdown.length,
+        retrievalMode: "full_skill_and_reference",
+        truncated: false
+      }]
+    });
+    expect(result.content).toEqual([{
+      type: "text",
+      text: expect.stringContaining(markdown)
+    }]);
+  });
+
+  it("returns a complete bounded document for an explicit intent or exact phrase", () => {
+    const playbook = "# メディア運営プレイブック\n\n全文";
+    const exactNotion = "# ガジェットプロフィール\n\n全文";
+    const result = buildSearchToolResult([
+      {
+        document_id: "editor-knowledge:knowhow-media-design",
+        source: "editor_knowledge",
+        title: "メディア運営プレイブック",
+        text: playbook,
+        match_position: 1,
+        matched_terms: ["メディア運営プレイブック"],
+        score: 1000,
+        search_stage: "intent"
+      },
+      {
+        document_id: "notion:gadget-profile",
+        source: "notion",
+        title: "ガジェットプロフィール",
+        text: exactNotion,
+        match_position: 1,
+        matched_terms: ["ガジェットプロフィール"],
+        score: 100,
+        search_stage: "phrase"
+      }
+    ]);
+    expect(result.structuredContent).toMatchObject({
+      results: [
+        {
+          contextChars: playbook.length,
+          retrievalMode: "full_exact_document",
+          truncated: false
+        },
+        {
+          contextChars: exactNotion.length,
+          retrievalMode: "full_exact_document",
+          truncated: false
+        }
+      ]
+    });
+    expect(result.content).toEqual([{
+      type: "text",
+      text: expect.stringMatching(/メディア運営プレイブック[\s\S]*ガジェットプロフィール/u)
+    }]);
+  });
 });

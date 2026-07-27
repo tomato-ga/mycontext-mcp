@@ -483,11 +483,14 @@ export class TidbClient {
   }
 
   async getEditorKnowledgeSectionedDocumentRevision(documentId: string): Promise<string | null> {
-    const [rows] = await this.pool.execute<Array<RowDataPacket & { section_revision_sha256: string | null }>>(
-      "SELECT section_revision_sha256 FROM editor_knowledge_documents WHERE document_id = ? LIMIT 1",
+    const [rows] = await this.pool.execute<Array<RowDataPacket & { active_revision_sha256: string | null }>>(
+      `SELECT COALESCE(section_revision_sha256, markdown_sha256) AS active_revision_sha256
+       FROM editor_knowledge_documents
+       WHERE document_id = ?
+       LIMIT 1`,
       [documentId]
     );
-    return rows[0]?.section_revision_sha256 ?? null;
+    return rows[0]?.active_revision_sha256 ?? null;
   }
 
   async upsertEditorKnowledgeSectionedDocumentAndSections(
@@ -495,6 +498,7 @@ export class TidbClient {
   ): Promise<void> {
     const connection = await this.pool.getConnection();
     try {
+      const wholeDocument = document.storageMode === "whole_document";
       await connection.beginTransaction();
       await connection.execute(
         `INSERT INTO editor_knowledge_documents
@@ -514,14 +518,21 @@ export class TidbClient {
           document.title,
           document.markdown,
           document.markdownSha256,
-          document.sectionRevisionSha256,
-          document.sectionCount,
-          document.searchSpanCount
+          wholeDocument ? null : document.sectionRevisionSha256,
+          wholeDocument ? null : document.sectionCount,
+          wholeDocument ? null : document.searchSpanCount
         ]
       );
 
-      for (const section of document.sections) {
-        await upsertEditorKnowledgeSection(connection, section);
+      if (wholeDocument) {
+        await connection.execute(
+          "DELETE FROM editor_knowledge_sections WHERE document_id = ?",
+          [document.documentId]
+        );
+      } else {
+        for (const section of document.sections) {
+          await upsertEditorKnowledgeSection(connection, section);
+        }
       }
       await connection.commit();
     } catch (error) {

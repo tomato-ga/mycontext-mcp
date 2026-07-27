@@ -6,6 +6,9 @@ import {
   normalizeSearchText,
   type PersonalSynonymConfig
 } from "../src/searchQuery.js";
+import { resolveEditorTrainingSearchIntent } from "../src/editorTrainingSearchIntent.js";
+import { resolvePlaybookSearchIntent } from "../src/playbookSearchIntent.js";
+import { resolveSkillContextSearchIntent } from "../src/skillContextSearchIntent.js";
 
 // Entirely fictional stand-in for a PERSONAL_SYNONYMS secret, injected explicitly per test.
 // No real names, revenue figures, or other personal facts belong in this file — see
@@ -33,6 +36,49 @@ const FICTIONAL_SYNONYMS: PersonalSynonymConfig = {
 };
 
 describe("natural-language search planning", () => {
+  it("resolves media and editing playbook aliases to canonical whole-document IDs", () => {
+    expect(resolvePlaybookSearchIntent("MCPこれのmedia playbook 読み込んでみて"))
+      .toMatchObject({
+        documentId: "editor-knowledge:knowhow-media-design",
+        canonicalTitle: "メディア運営プレイブック"
+      });
+    expect(resolvePlaybookSearchIntent("MyContext Documents 編集プレイブックを読んで"))
+      .toMatchObject({
+        documentId: "editor-knowledge:henshu-editing-playbook",
+        canonicalTitle: "MyContext Documents 編集プレイブック"
+      });
+    expect(resolvePlaybookSearchIntent("media playbookと編集プレイブックを比較して"))
+      .toBeNull();
+  });
+
+  it("routes distinctive editor-training topics to canonical lesson documents", () => {
+    expect(resolveEditorTrainingSearchIntent(
+      "企画を検討する編集会議の進行方法を知りたい"
+    )).toMatchObject({
+      documentId: "editor-knowledge:lesson-06",
+      canonicalTitle: "第6回: 編集会議"
+    });
+    expect(resolveEditorTrainingSearchIntent(
+      "ウェブメディアの基本的な仕組みを編集者研修から説明して"
+    )).toMatchObject({
+      documentId: "editor-knowledge:lesson-01",
+      canonicalTitle: "第1回: ウェブメディアの基礎知識"
+    });
+    expect(resolveEditorTrainingSearchIntent("編集の基本姿勢を知りたい")).toBeNull();
+  });
+
+  it("routes one exact analysis-skill ID without guessing a batch request", () => {
+    expect(resolveSkillContextSearchIntent(
+      "marketing-lean-canvas をMCPから読み込んで"
+    )).toMatchObject({
+      skillId: "marketing-lean-canvas",
+      documentId: "skill-context:marketing-lean-canvas"
+    });
+    expect(resolveSkillContextSearchIntent(
+      "marketing-lean-canvas と resolution-diagnose を比較して"
+    )).toBeNull();
+  });
+
   it("normalizes full-width characters and whitespace", () => {
     expect(normalizeSearchText("  ＡＩ   エージェント  ")).toBe("AI エージェント");
   });
@@ -102,5 +148,16 @@ describe("natural-language search planning", () => {
       "Webメディアの基礎知識を新人編集者向けに教えて",
       FICTIONAL_SYNONYMS.termAliases
     )).toEqual(expect.arrayContaining(["Webメディア", "ウェブメディア"]));
+  });
+
+  it("keeps meaningful subterms from long Japanese compounds for title matching", () => {
+    expect(extractSearchTerms("編集研修カリキュラム全体の構成をまとめて"))
+      .toEqual(expect.arrayContaining(["編集", "研修", "カリキュラム", "全体"]));
+    expect(extractSearchTerms("MVPからPMFまでの起業プロセス"))
+      .toEqual(expect.arrayContaining(["MVP", "PMF", "起業"]));
+    expect(extractSearchTerms("コンテンツマーケティングと生成AI時代の検索対策"))
+      .toEqual(expect.arrayContaining(["コンテンツマーケティング", "マーケティング"]));
+    expect(extractSearchTerms("技術やツールをスキルマップから確認したい"))
+      .toEqual(expect.arrayContaining(["スキルマップ", "スキル"]));
   });
 });

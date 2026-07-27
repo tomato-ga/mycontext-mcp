@@ -22,6 +22,7 @@ export const NOTION_PROPERTIES = {
   lastSynced: "Last Synced",
   syncedHash: "Synced Hash",
   activeRevision: "Active Revision",
+  tidbTables: "TiDB Tables",
   validationError: "Validation Error",
   syncSource: "Sync Source",
   originalPageId: "Original Page ID"
@@ -88,6 +89,11 @@ export class NotionApiClient implements NotionGateway {
     }
     if (update.activeRevision !== undefined) {
       properties[NOTION_PROPERTIES.activeRevision] = richTextUpdate(update.activeRevision);
+    }
+    if (update.tidbTables !== undefined) {
+      properties[NOTION_PROPERTIES.tidbTables] = {
+        multi_select: update.tidbTables.map((name) => ({ name }))
+      };
     }
     if (update.validationError !== undefined) {
       properties[NOTION_PROPERTIES.validationError] = richTextUpdate(
