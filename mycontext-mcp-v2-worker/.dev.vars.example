@@ -1,0 +1,9 @@
+TIDB_DATABASE_URL=mysql://<user>:<password>@<host>/<database>
+GITHUB_CLIENT_ID=<github-oauth-app-client-id>
+GITHUB_CLIENT_SECRET=<github-oauth-app-client-secret>
+GITHUB_ALLOWED_USER_ID=<numeric-github-user-id>
+
+# Optional. JSON-encoded personal synonym/alias config for search_personal_context (see
+# src/searchQuery.ts). Omit entirely for no synonym expansion (a safe, fully-functional
+# default) — do not put real names or personal facts in this example file.
+PERSONAL_SYNONYMS={"termAliases":{"<nickname>":{"aliases":["<full name>"],"suppressOriginalTerm":true}},"synonymGroups":[["<term>","<synonym>"]]}

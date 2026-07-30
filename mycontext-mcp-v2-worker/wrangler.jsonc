@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mycontext-mcp-v2",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-06",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.2
+    }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "a0616be361fb4a65bd12e1fe35ec1101"
+    },
+    {
+      "binding": "AUTH_KV",
+      "id": "3bb6082de7ba4730b759c3e6e8322027"
+    }
+  ],
+  "triggers": {
+    "crons": ["17 4 * * *"]
+  }
+}

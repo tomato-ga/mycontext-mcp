@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   mycontext-sync:
     runs-on: ubuntu-latest
@@ -71,3 +74,35 @@ jobs:
         working-directory: mycontext-sync-worker
       - run: pnpm exec wrangler deploy --dry-run
         working-directory: mycontext-sync-worker
+
+  mycontext-mcp-v2-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: pnpm
+          cache-dependency-path: mycontext-mcp-v2-worker/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --strict-peer-dependencies
+        working-directory: mycontext-mcp-v2-worker
+      - run: ./scripts/check-public-safety.sh
+      - run: pnpm run typecheck
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm test
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm run verify:isolation
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm run verify:data-plane
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm run verify:oauth-policy
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm run verify:dependencies
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm run verify:release-plan
+        working-directory: mycontext-mcp-v2-worker
+      - run: pnpm run deploy:dry-run
+        working-directory: mycontext-mcp-v2-worker

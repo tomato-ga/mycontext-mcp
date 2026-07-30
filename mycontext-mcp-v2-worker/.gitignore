@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+dist/
+.dev.vars
+*.log
+.DS_Store
+
+# Contains real names, real Notion page IDs, and other private facts in its query fixtures —
+# evaluates search ranking against this developer's real personal knowledge base and would
+# lose its meaning if genericized. Local only, never commit.
+tests/liveSearchEvaluation.test.ts

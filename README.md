@@ -28,7 +28,10 @@ Kindle Metaskill transcription (fixed 1 file)
 TiDB context tables
   -> mycontext-mcp-worker
   -> MCP tools + context packs + section Resources
-  -> MCP clients
+  -> existing MCP clients
+TiDB context tables
+  -> mycontext-mcp-v2-worker (local implementation; not deployed yet)
+  -> MCP 2026-07-28 + TypeScript SDK v2 contract tests
 
 TiDB notion_pages
   -> mycontext-sync export-obsidian
@@ -44,6 +47,7 @@ TiDB notion_pages
 | `mycontext-sync/` | Notionと固定ローカルコーパスを用途別テーブルへ保存する TypeScript CLI。TiDB から Obsidian へ Notion Markdownをexportするコマンドも持つ。 |
 | `mycontext-sync-worker/` | Notionの`Ready`をWebhookとQueueで受け、検証済みrevisionだけをTiDBへ反映する非公開同期Worker。 |
 | `mycontext-mcp-worker/` | TiDB の文書、意味section、選択式context packを公開する Cloudflare Workers Remote MCP server。既存 `/mcp` はOAuth 2.1保護、`/healthz` は公開liveness endpoint。 |
+| `mycontext-mcp-v2-worker/` | 現行Workerを変更せず並行新設するMCP stable `2026-07-28` / TypeScript SDK v2実装。独立KVまで作成済みで、Worker・OAuth Appは未作成、未deploy。 |
 | `docs/` | 記事企画や運用メモなど、プロジェクト横断の資料。 |
 
 ## 個人利用と公開repoの分離
@@ -192,7 +196,10 @@ Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README
 ## Remote MCP
 
 `mycontext-mcp-worker` は Cloudflare Workers 上で動く読み取り専用 MCP server です。
-MCP stable `2026-07-28`およびTypeScript SDK v2への移行方針は
+現行Workerを維持したまま、別ディレクトリ`mycontext-mcp-v2-worker`へ
+MCP stable `2026-07-28`・TypeScript SDK v2のローカル実装と試験を追加しました。
+別Worker `mycontext-mcp-v2`と専用GitHub OAuth Appはまだ作成・upload・deployしていません。
+分離方針、検証証拠、残りのrollout手順は
 [docs/mcp-2026-07-28-migration-design.md](docs/mcp-2026-07-28-migration-design.md)を参照してください。
 
 公開 endpoint:
@@ -208,6 +215,7 @@ MCP stable `2026-07-28`およびTypeScript SDK v2への移行方針は
 - `get_planning_playbook_context`: 企画案・記事構成・H2/H3見出し・本文構成の作成／レビュー／修正で最初に使い、`kikaku-composition-playbook`全文を非省略で返す。その後に必要な事例だけを検索する。
 - `get_editing_playbook_context`: 上がってきた原稿の編集・赤入れ・校正校閲・公開判断・公開後リライトで最初に使い、`henshu-editing-playbook`全文を非省略で返す。企画・構成をゼロから作る場合は`get_planning_playbook_context`を使う。
 - `get_media_playbook_context`: メディア戦略・ポジショニング・運営体制・KPI・流通・収益化で最初に使い、`knowhow-media-design`全文を非省略で返す。
+- `get_analysis_skill_context`: 指定した分析フレームワークの`SKILL.md`と`reference.md`を完全な1文書として返す。
 - `get_author_style_context`: 文書種別・操作・モード・長さ・profileに応じた意味完結sectionを、通常利用向けの1パックとして返す。
 - `search_author_style_evidence`: 根拠確認時だけevidence/profile/ops層を検索し、ヒットした細粒度spanを意味完結sectionへ展開して返す。
 - `get_metaskill_context`: topic・intent・depthに応じた意味完結sectionを、通常利用向けの1パックとして返す。
@@ -272,6 +280,12 @@ mycontext-sync/scripts/run-obsidian-sync.sh
 この作業環境では月曜 04:00 ローカル時刻に実行する LaunchAgent で運用しています。公開リポジトリには個人環境の plist は含めません。
 
 ### Remote MCP Worker
+
+以下は現行`mycontext-mcp`の既存運用手順です。MCP v2の並行新設移行では実行禁止とし、
+現行Workerのsecret更新・再deployには使いません。新設手順は
+[移行設計](docs/mcp-2026-07-28-migration-design.md)と
+[`mycontext-mcp-v2-worker/README.md`](mycontext-mcp-v2-worker/README.md)の
+ローカル検証手順を参照してください。
 
 ```bash
 cd mycontext-mcp-worker
