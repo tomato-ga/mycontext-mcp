@@ -13,6 +13,7 @@ import {
   type LoadedEditorKnowledgeSectionedDocument
 } from "../../mycontext-sync/src/editorKnowledge.js";
 import { sha256 } from "./hash.js";
+import type { AuthorStylePageIds } from "./config.js";
 import { SyncStateTrace } from "./stateLog.js";
 import { tidbTablesForDocument } from "./tidbTables.js";
 import {
@@ -38,6 +39,7 @@ export interface SyncDependencies {
   }) => LoadedEditorKnowledgeSectionedDocument;
   now?: () => Date;
   deliveryAttempt?: number;
+  authorStylePageIds?: AuthorStylePageIds;
 }
 
 const EXPECTED_SCHEMA_VERSION = {
@@ -114,8 +116,9 @@ async function handleReadyPage(
 
   try {
     validateManagedDocument(managed);
+    validateAuthorStylePage(managed, dependencies.authorStylePageIds);
     const owners = await dependencies.notion.findByDocumentId(managed.documentId);
-    if (owners.length !== 1 || owners[0]?.pageId !== managed.pageId) {
+    if (!isUniqueDocumentOwnerOrDeclaredAuthorStyleMigration(managed, owners)) {
       throw new SyncFailure(
         "notion_document_id_duplicate",
         `Document ID must identify exactly one page: ${managed.documentId}`,
@@ -151,6 +154,7 @@ async function handleReadyPage(
     validateMarkdown(second);
     const refreshed = await dependencies.notion.getManagedDocument(pageId);
     validateManagedDocument(refreshed);
+    validateAuthorStylePage(refreshed, dependencies.authorStylePageIds);
     if (refreshed.status !== "Syncing") {
       throw new SyncFailure(
         "notion_status_changed_during_sync",
@@ -259,7 +263,9 @@ async function handleReadyPage(
       status: "Synced",
       tidbTables: tidbTablesForDocument(refreshed),
       syncedHash: secondFingerprint,
-      activeRevision: outcome.revisionSha256 ?? secondHash,
+      activeRevision: refreshed.category === "Author Style"
+        ? null
+        : outcome.revisionSha256 ?? secondHash,
       validationError: null,
       lastSyncedAt: (dependencies.now?.() ?? new Date()).toISOString()
     });
@@ -360,15 +366,20 @@ async function syncAuthorStyle(
 
   if (state !== null && state.sourcePathKey.startsWith("notion:")
     && state.sourcePathKey !== expectedSourceKey) {
-    throw new SyncFailure(
-      "author_style_owned_by_another_notion_page",
-      `${managed.documentId} is already owned by another Notion page`,
-      { workflowStatus: "Conflict" }
-    );
+    const declaredPreviousSourceKey = managed.originalPageId === null
+      ? null
+      : `notion:${managed.originalPageId}`;
+    if (state.sourcePathKey !== declaredPreviousSourceKey) {
+      throw new SyncFailure(
+        "author_style_owned_by_another_notion_page",
+        `${managed.documentId} is already owned by another Notion page`,
+        { workflowStatus: "Conflict" }
+      );
+    }
   }
 
   if (
-    state?.activeRevisionSha256 === document.revisionSha256
+    state?.contextSha256 === document.revisionSha256
     && state.sourcePathKey === expectedSourceKey
   ) {
     return {
@@ -390,6 +401,17 @@ async function syncAuthorStyle(
     status: "synced",
     revisionSha256: document.revisionSha256
   };
+}
+
+function isUniqueDocumentOwnerOrDeclaredAuthorStyleMigration(
+  managed: ManagedNotionDocument,
+  owners: ManagedNotionDocument[]
+): boolean {
+  if (owners.length === 1 && owners[0]?.pageId === managed.pageId) return true;
+  if (managed.category !== "Author Style" || managed.originalPageId === null) return false;
+  if (managed.originalPageId === managed.pageId || owners.length !== 2) return false;
+  const ownerIds = new Set(owners.map((owner) => owner.pageId));
+  return ownerIds.has(managed.pageId) && ownerIds.has(managed.originalPageId);
 }
 
 async function syncEditorKnowledgeSectioned(
@@ -442,6 +464,21 @@ function validateManagedDocument(managed: ManagedNotionDocument): void {
     throw new SyncFailure(
       "notion_sync_source_invalid",
       "Sync Source must be Notion for automatic synchronization",
+      { workflowStatus: "Conflict" }
+    );
+  }
+}
+
+function validateAuthorStylePage(
+  managed: ManagedNotionDocument,
+  pageIds: AuthorStylePageIds | undefined
+): void {
+  if (managed.category !== "Author Style" || pageIds === undefined) return;
+  const expectedPageId = pageIds[managed.documentId as keyof AuthorStylePageIds];
+  if (expectedPageId === undefined || managed.pageId !== expectedPageId) {
+    throw new SyncFailure(
+      "author_style_page_not_allowed",
+      `Author Style sync is not allowed for ${managed.documentId} from page ${managed.pageId}`,
       { workflowStatus: "Conflict" }
     );
   }

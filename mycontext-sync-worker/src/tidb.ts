@@ -137,13 +137,9 @@ export class TidbSyncRepository implements SyncRepository {
 
   async getAuthorStyleState(documentId: string): Promise<AuthorStyleState | null> {
     const rows = await this.execute(
-      `SELECT d.active_revision_sha256, d.source_path_key,
-              r.source_markdown_sha256 AS active_source_markdown_sha256
-       FROM author_style_documents AS d
-       LEFT JOIN author_style_revisions AS r
-         ON r.document_id = d.document_id
-        AND r.revision_sha256 = d.active_revision_sha256
-       WHERE d.document_id = ?
+      `SELECT context_sha256, source_markdown_sha256, source_path_key
+       FROM author_style_documents
+       WHERE document_id = ?
        LIMIT 1`,
       [documentId]
     );
@@ -159,45 +155,64 @@ export class TidbSyncRepository implements SyncRepository {
     try {
       const current = await lockedAuthorStyleState(tx, input.document.documentId);
       assertExpectedState(current, input.expectedState, input.document.documentId);
-      if (current === null) {
-        await tx.execute(
-          `INSERT INTO author_style_documents
-            (document_id, author_key, style_scope, display_name, source_path_key,
-             active_revision_sha256, status, last_synced_at)
-           VALUES (?, ?, ?, ?, ?, NULL, 'active', NULL)`,
-          [
-            input.document.documentId,
-            input.document.authorKey,
-            input.document.styleScope,
-            input.document.displayName,
-            notionSourceKey(input.notionPageId)
-          ]
-        );
-      } else {
-        await tx.execute(
-          `UPDATE author_style_documents
-           SET author_key = ?, style_scope = ?, display_name = ?, source_path_key = ?,
-               status = 'active'
-           WHERE document_id = ?`,
-          [
-            input.document.authorKey,
-            input.document.styleScope,
-            input.document.displayName,
-            notionSourceKey(input.notionPageId),
-            input.document.documentId
-          ]
-        );
-      }
-      await insertAuthorStyleRevision(tx, input.document);
+      await tx.execute(
+        `INSERT INTO author_style_documents
+          (document_id, author_key, style_scope, display_name, source_path_key,
+           context_sha256, source_markdown, source_markdown_sha256, source_bytes,
+           source_line_count, source_mtime_ms, parser_version, sectioning_version,
+           routing_version, routing_manifest_json, outline_json, section_count,
+           delivery_section_count, search_span_count, status, last_synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW(3))
+         ON DUPLICATE KEY UPDATE
+          author_key = VALUES(author_key),
+          style_scope = VALUES(style_scope),
+          display_name = VALUES(display_name),
+          source_path_key = VALUES(source_path_key),
+          context_sha256 = VALUES(context_sha256),
+          source_markdown = VALUES(source_markdown),
+          source_markdown_sha256 = VALUES(source_markdown_sha256),
+          source_bytes = VALUES(source_bytes),
+          source_line_count = VALUES(source_line_count),
+          source_mtime_ms = VALUES(source_mtime_ms),
+          parser_version = VALUES(parser_version),
+          sectioning_version = VALUES(sectioning_version),
+          routing_version = VALUES(routing_version),
+          routing_manifest_json = VALUES(routing_manifest_json),
+          outline_json = VALUES(outline_json),
+          section_count = VALUES(section_count),
+          delivery_section_count = VALUES(delivery_section_count),
+          search_span_count = VALUES(search_span_count),
+          status = 'active',
+          last_synced_at = NOW(3)`,
+        [
+          input.document.documentId,
+          input.document.authorKey,
+          input.document.styleScope,
+          input.document.displayName,
+          notionSourceKey(input.notionPageId),
+          input.document.revisionSha256,
+          input.document.sourceMarkdown,
+          input.document.sourceMarkdownSha256,
+          input.document.sourceBytes,
+          input.document.sourceLineCount,
+          input.document.sourceMtimeMs,
+          input.document.parserVersion,
+          input.document.sectioningVersion,
+          input.document.routingVersion,
+          JSON.stringify(input.document.routingManifest),
+          JSON.stringify(input.document.outline),
+          input.document.sectionCount,
+          input.document.deliverySectionCount,
+          input.document.searchSpanCount
+        ]
+      );
+      await tx.execute(
+        "DELETE FROM author_style_current_sections WHERE document_id = ?",
+        [input.document.documentId]
+      );
       for (const section of input.document.sections) {
         await upsertAuthorStyleSection(tx, section);
       }
-      await tx.execute(
-        `UPDATE author_style_documents
-         SET active_revision_sha256 = ?, last_synced_at = NOW(3)
-         WHERE document_id = ?`,
-        [input.document.revisionSha256, input.document.documentId]
-      );
       await tx.commit();
     } catch (error) {
       await safeRollback(tx);
@@ -284,13 +299,9 @@ async function lockedAuthorStyleState(
   documentId: string
 ): Promise<AuthorStyleState | null> {
   const rows = await tx.execute(
-    `SELECT d.active_revision_sha256, d.source_path_key,
-            r.source_markdown_sha256 AS active_source_markdown_sha256
-     FROM author_style_documents AS d
-     LEFT JOIN author_style_revisions AS r
-       ON r.document_id = d.document_id
-      AND r.revision_sha256 = d.active_revision_sha256
-     WHERE d.document_id = ?
+    `SELECT context_sha256, source_markdown_sha256, source_path_key
+     FROM author_style_documents
+     WHERE document_id = ?
      LIMIT 1
      FOR UPDATE`,
     [documentId]
@@ -304,8 +315,8 @@ function assertExpectedState(
   documentId: string
 ): void {
   if (
-    current?.activeRevisionSha256 !== expected?.activeRevisionSha256
-    || current?.activeSourceMarkdownSha256 !== expected?.activeSourceMarkdownSha256
+    current?.contextSha256 !== expected?.contextSha256
+    || current?.sourceMarkdownSha256 !== expected?.sourceMarkdownSha256
     || current?.sourcePathKey !== expected?.sourcePathKey
   ) {
     throw new SyncFailure(
@@ -314,38 +325,6 @@ function assertExpectedState(
       { workflowStatus: "Conflict" }
     );
   }
-}
-
-async function insertAuthorStyleRevision(
-  tx: Tx<{ url: string }>,
-  document: LoadedAuthorStyleDocument
-): Promise<void> {
-  await tx.execute(
-    `INSERT INTO author_style_revisions
-      (document_id, revision_sha256, source_markdown, source_markdown_sha256,
-       source_bytes, source_line_count, source_mtime_ms, parser_version,
-       sectioning_version, routing_version, routing_manifest_json, outline_json,
-       section_count, delivery_section_count, search_span_count, synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))
-     ON DUPLICATE KEY UPDATE revision_sha256 = VALUES(revision_sha256)`,
-    [
-      document.documentId,
-      document.revisionSha256,
-      document.sourceMarkdown,
-      document.sourceMarkdownSha256,
-      document.sourceBytes,
-      document.sourceLineCount,
-      document.sourceMtimeMs,
-      document.parserVersion,
-      document.sectioningVersion,
-      document.routingVersion,
-      JSON.stringify(document.routingManifest),
-      JSON.stringify(document.outline),
-      document.sectionCount,
-      document.deliverySectionCount,
-      document.searchSpanCount
-    ]
-  );
 }
 
 async function upsertEditorKnowledgeSection(
@@ -412,14 +391,14 @@ async function upsertAuthorStyleSection(
   section: AuthorStyleSection
 ): Promise<void> {
   await tx.execute(
-    `INSERT INTO author_style_sections
-      (document_id, revision_sha256, section_id, context_key, parent_section_id,
+    `INSERT INTO author_style_current_sections
+      (document_id, section_id, context_key, parent_section_id,
        delivery_section_id, section_type, content_layer, context_priority,
        heading_level, title, heading_path_json, aliases_json, ordinal,
        source_line_start, source_line_end, content_chars, estimated_tokens,
        direct_markdown, delivery_markdown, retrieval_text, content_sha256,
        is_searchable)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        context_key = VALUES(context_key),
        parent_section_id = VALUES(parent_section_id),
@@ -443,7 +422,6 @@ async function upsertAuthorStyleSection(
        is_searchable = VALUES(is_searchable)`,
     [
       section.documentId,
-      section.revisionSha256,
       section.sectionId,
       section.contextKey,
       section.parentSectionId,
@@ -472,8 +450,8 @@ async function upsertAuthorStyleSection(
 function stateFromRow(value: Row): AuthorStyleState {
   const row = record(value);
   return {
-    activeRevisionSha256: optionalString(row.active_revision_sha256),
-    activeSourceMarkdownSha256: optionalString(row.active_source_markdown_sha256),
+    contextSha256: requiredString(row.context_sha256, "context_sha256"),
+    sourceMarkdownSha256: requiredString(row.source_markdown_sha256, "source_markdown_sha256"),
     sourcePathKey: requiredString(row.source_path_key, "source_path_key")
   };
 }

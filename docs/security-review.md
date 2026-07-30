@@ -60,14 +60,15 @@ No committed production secrets should be included in the public repository. Rea
 - Severity: High
 - Location: `mycontext-sync/author-style-schema.sql`, author-style sync/parser,
   and the two dedicated Worker tools.
-- Evidence: migration creates only three `author_style_*` tables; sync uses two
-  fixed document IDs and transactionally activates immutable revisions. The
+- Evidence: migration creates only two current-snapshot `author_style_*` tables;
+  sync uses two fixed document IDs and exact Notion page IDs, then transactionally
+  replaces only that document and its current sections. The
   general document list/search SQL does not include author style. Worker access
   is read-only and selector values are allowlisted before parameterized SQL.
 - Impact: mixing personal style sources into generic search would increase
   accidental context exposure and token use; partial revision activation could
   return incomplete rules.
-- Fix: dedicated tables and tools, active-revision joins, complete semantic
+- Fix: dedicated tables and tools, current-snapshot joins, complete semantic
   delivery sections, no truncation, and audit-only full-source Resources.
 - Status: Fixed by design, unit-tested, and live-smoke verified.
 
@@ -78,7 +79,7 @@ No committed production secrets should be included in the public repository. Rea
 - `mycontext-sync/src/obsidianExport.ts` verifies export paths remain inside the configured vault/output directory.
 - The Worker does not call the Notion API, run migrations, write to TiDB, expose raw SQL, or read/write Obsidian files.
 - Business section Resources are read-only and resolve only the two allowlisted document IDs and their active section revisions.
-- Author-style Resources and tools resolve only active revisions; normal
+- Author-style Resources and tools resolve only current snapshots; normal
   context output contains complete selected sections once, while structured
   content contains metadata only.
 - `/mcp` requires an OAuth access token issued after DCR + S256 PKCE and an

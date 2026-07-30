@@ -46,10 +46,10 @@ describe("syncAuthorStyleDocument", () => {
     vi.mocked(loadAuthorStyleDocument).mockResolvedValue(document);
   });
 
-  it("skips an already active immutable revision", async () => {
+  it("skips an unchanged current snapshot", async () => {
     const writer: AuthorStyleWriter = {
       getAuthorStyleDocumentState: vi.fn().mockResolvedValue({
-        activeRevisionSha256: document.revisionSha256,
+        contextSha256: document.revisionSha256,
         sourcePathKey: source.relativePath
       }),
       upsertAuthorStyleDocumentAndSections: vi.fn()
@@ -65,10 +65,10 @@ describe("syncAuthorStyleDocument", () => {
     expect(writer.upsertAuthorStyleDocumentAndSections).not.toHaveBeenCalled();
   });
 
-  it("writes and activates the revision when reindex is requested", async () => {
+  it("replaces the current snapshot when reindex is requested", async () => {
     const writer: AuthorStyleWriter = {
       getAuthorStyleDocumentState: vi.fn().mockResolvedValue({
-        activeRevisionSha256: document.revisionSha256,
+        contextSha256: document.revisionSha256,
         sourcePathKey: source.relativePath
       }),
       upsertAuthorStyleDocumentAndSections: vi.fn()
@@ -87,7 +87,7 @@ describe("syncAuthorStyleDocument", () => {
   it("refuses to overwrite a document whose source is managed by Notion", async () => {
     const writer: AuthorStyleWriter = {
       getAuthorStyleDocumentState: vi.fn().mockResolvedValue({
-        activeRevisionSha256: document.revisionSha256,
+        contextSha256: document.revisionSha256,
         sourcePathKey: "notion:page-1"
       }),
       upsertAuthorStyleDocumentAndSections: vi.fn()

@@ -4,6 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-06",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "AUTHOR_STYLE_TITLE_PAGE_ID": "3a5625fe-b1a2-818a-96fe-fe6241c33f14",
+    "AUTHOR_STYLE_BODY_PAGE_ID": "1b2625fe-b1a2-82d0-9a16-011305919485"
+  },
   "observability": {
     "logs": {
       "enabled": true,

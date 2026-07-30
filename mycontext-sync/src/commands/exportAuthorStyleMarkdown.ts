@@ -8,39 +8,28 @@ export async function runExportAuthorStyleMarkdown(flags: CliFlags): Promise<voi
   const client = createTidbClientFromEnv();
   try {
     const document = await client.getAuthorStyleDocument(documentId);
-    if (document?.active_revision_sha256 === null || document === null) {
+    if (document === null) {
       throw new AppError(
-        "author_style_active_revision_missing",
-        `active author-style revision not found: ${documentId}`,
-        3
-      );
-    }
-    const revision = await client.getAuthorStyleRevision(
-      documentId,
-      document.active_revision_sha256
-    );
-    if (revision === null) {
-      throw new AppError(
-        "author_style_revision_missing",
-        `author-style revision not found: ${document.active_revision_sha256}`,
+        "author_style_current_snapshot_missing",
+        `current author-style snapshot not found: ${documentId}`,
         3
       );
     }
     const outputPath = flags.outputPath === undefined
       ? path.join(
           flags.outputDir ?? path.join("private-exports", "mycontext", isoDate(new Date())),
-          `${documentId}-${revision.revision_sha256.slice(0, 12)}.md`
+          `${documentId}-${document.context_sha256.slice(0, 12)}.md`
         )
       : flags.outputPath;
     const result = await writeEmergencyAuthorStyleSnapshot({
       outputPath,
-      markdown: revision.source_markdown,
+      markdown: document.source_markdown,
       metadata: {
         document_id: documentId,
-        source: "tidb-active-revision",
+        source: "tidb-current-snapshot",
         source_path_key: document.source_path_key,
-        revision_sha256: revision.revision_sha256,
-        markdown_sha256: revision.source_markdown_sha256,
+        revision_sha256: document.context_sha256,
+        markdown_sha256: document.source_markdown_sha256,
         exported_at: new Date().toISOString(),
         emergency_snapshot: true
       }

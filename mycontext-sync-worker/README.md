@@ -37,9 +37,9 @@ Webhookは`page.properties_updated`と`page.content_updated`だけをQueueへ送
 | `TiDB Tables` | Multi-select | Worker管理。実際のTiDB保存先table |
 | `Last Synced` | Date | Worker管理 |
 | `Synced Hash` | Rich text | Worker管理 |
-| `Active Revision` | Rich text | Worker管理 |
+| `Active Revision` | Rich text | Worker管理。Author Styleでは使用せず空欄 |
 | `Validation Error` | Rich text | Worker管理 |
-| `Original Page ID` | Rich text | 既存`notion_pages`行を複製ページIDへ移すときだけ使用 |
+| `Original Page ID` | Rich text | 既存`notion_pages`行またはAuthor Styleの所有元を複製ページIDへ移すときだけ使用 |
 
 任意で`Owner`（Person）を追加できます。`Draft / Review`、`Ready`、`Synced`、`Error / Conflict`、`Archived`のStatus別viewを作ると、日常操作は「編集してReadyにする」だけになります。
 
@@ -53,21 +53,23 @@ Webhookは`page.properties_updated`と`page.content_updated`だけをQueueへ送
 | --- | --- |
 | `personal-context-v1` | `notion_pages` |
 | `ai-skill-v1` | `notion_pages` |
-| `author-style-v1` | `author_style_documents`, `author_style_revisions`, `author_style_sections` |
+| `author-style-v1` | `author_style_documents`, `author_style_current_sections` |
 | `editor-knowledge-v1` | 原則: `editor_knowledge_documents`, `editor_knowledge_sections` |
 | `metaskill-v1` | `metaskill_documents`, `metaskill_revisions`, `metaskill_sections` |
 
 - `Personal Context`: 既存`notion_pages`へ全文Markdownを保存する。`Original Page ID`の行があれば主キーを新しいNotionページIDへ移すため、複製レコードは作らない。
 - `AI Skill`: 再利用可能なAI実行手順を、スキルごとに既存`notion_pages`へ全文Markdownとして保存する。
-- `Author Style`: `ore-title-style`または`ore-body-style`だけを既存のrevision/section/routing parserで検証し、3つのauthor-style tableへ保存する。
+- `Author Style`: 固定された2つのNotionページだけを既存のsection/routing parserで検証し、現在スナップショットを2つのauthor-style tableへ保存する。`ore-title-style`は`3a5625fe-b1a2-818a-96fe-fe6241c33f14`、`ore-body-style`は`1b2625fe-b1a2-82d0-9a16-011305919485`以外から同期できない。
 - `Editor Knowledge`: 企画・編集ノウハウを検証して保存する。`henshu-editing-playbook`と`knowhow-media-design`は全文1レコード方式のため`editor_knowledge_documents`だけを使い、旧section行も同期時に削除する。それ以外は2つのeditor-knowledge tableへsection化して保存する。
 - `Metaskill`: 専用`metaskill_*` tableのactive revisionを示す管理用スナップショット。TiDBを正本とし、Notionから`Ready`にして再同期することはできない。
 
 MyContext Documentsに複製した6文書はすべてNotionを正本とします。ローカルMarkdownはWorkerの入力にも、初回移行の判定にも使いません。
 
+Author Styleの同期元は上記2ページに固定されています。ページ移行時はWorker設定のpage IDも明示的に変更する必要があります。
+
 ## 初回移行
 
-初回の`Ready`では、Notion APIが返す本文を正本として検証し、既存tableへ新しいimmutable revisionを作ってactiveに切り替えます。過去のローカルrevisionは履歴として残し、上書きや削除はしません。
+`Ready`ではNotion APIが返す本文を正本として検証し、文書行と現行section行を同一トランザクションで置換します。同じ内容なら`context_sha256`でskipし、履歴行は作りません。
 
 Notionでは最初のH1がページタイトルになる場合があるため、author-style parserへ渡すときだけ`Name`からH1を復元します。Notion本文そのものはWorkerが変更しません。従来の`pull-author-style`は`source_path_key`が`notion:<page-id>`になった文書をローカルMarkdownから上書きしません。
 
@@ -83,15 +85,17 @@ NOTION_WEBHOOK_BOOTSTRAP_SECRET
 NOTION_WEBHOOK_VERIFICATION_TOKEN
 ```
 
+固定同期元の`AUTHOR_STYLE_TITLE_PAGE_ID`と`AUTHOR_STYLE_BODY_PAGE_ID`は
+secretではないWorker varsとして`wrangler.jsonc`に設定します。
+
 Notion integrationには対象data sourceへのread contentとpage property update権限だけを与えます。Workerはページ本文を書き換えません。
 
-TiDB writerは次のread model tableだけに`SELECT`、`INSERT`、`UPDATE`を許可します。`DELETE`、DDL、他tableへの権限は不要です。
+TiDB writerは次のread model tableだけに`SELECT`、`INSERT`、`UPDATE`を許可します。Author Styleの現行section入れ替えには`author_style_current_sections`への`DELETE`も必要です。DDLと他tableへの権限は不要です。
 
 ```text
 notion_pages
 author_style_documents
-author_style_revisions
-author_style_sections
+author_style_current_sections
 ```
 
 `context_sync_state_log`には`INSERT`だけを許可します。このtableは追記専用で、Workerは過去の状態ログを`UPDATE`または`DELETE`しません。
@@ -148,7 +152,7 @@ pnpm exec wrangler deploy --dry-run
 
 ## Emergency Markdown
 
-ローカルMarkdownは通常同期に参加しません。TiDB active revisionの緊急スナップショットと、明示的な復旧だけに使います。
+ローカルMarkdownは通常同期に参加しません。TiDB current snapshotの緊急スナップショットと、明示的な復旧だけに使います。
 
 ```bash
 cd ../mycontext-sync
@@ -159,6 +163,6 @@ pnpm restore-author-style-markdown -- --document-id ore-body-style \
   --input-path /private/path/snapshot.md --activate-emergency
 ```
 
-exportは原文`.md`とmetadata `.md.json`を分離して保存し、原文へfrontmatterを加えません。restoreは`--activate-emergency`がなければTiDBを書き換えません。緊急revisionの`source_path_key`は`emergency:<absolute-path>`となります。Notion復旧後は、Notion上の正しい本文を確認して`Ready`へ戻すと新しいNotion revisionがactiveになります。
+exportは原文`.md`とmetadata `.md.json`を分離して保存し、原文へfrontmatterを加えません。restoreは`--activate-emergency`がなければTiDBを書き換えません。緊急snapshotの`source_path_key`は`emergency:<absolute-path>`となります。Notion復旧後は、Notion上の正しい本文を確認して`Ready`へ戻すとcurrent snapshotが置き換わります。
 
 Personal Contextのローカル退避には既存の`pnpm export-obsidian`を使用できます。いずれのexportファイルも通常同期の入力にはなりません。

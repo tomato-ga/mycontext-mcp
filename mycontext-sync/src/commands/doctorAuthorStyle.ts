@@ -17,9 +17,8 @@ type DoctorStatus =
   | "ok"
   | "source_invalid"
   | "missing_tidb_document"
-  | "missing_active_revision"
   | "document_mismatch"
-  | "revision_mismatch"
+  | "snapshot_mismatch"
   | "section_count_mismatch"
   | "section_mismatch"
   | "routing_invalid";
@@ -44,58 +43,32 @@ export async function runDoctorAuthorStyle(_flags: CliFlags): Promise<void> {
           });
           continue;
         }
-        if (storedDocument.active_revision_sha256 === null) {
-          results.push({
-            documentId: source.documentId,
-            status: "missing_active_revision" satisfies DoctorStatus,
-            warnings: []
-          });
-          continue;
-        }
-        const storedRevision = await client.getAuthorStyleRevision(
-          source.documentId,
-          storedDocument.active_revision_sha256
-        );
-        if (storedRevision === null) {
-          results.push({
-            documentId: source.documentId,
-            status: "missing_active_revision" satisfies DoctorStatus,
-            activeRevisionSha256: storedDocument.active_revision_sha256,
-            warnings: []
-          });
-          continue;
-        }
-        const rows = await client.listAuthorStyleSections(
-          source.documentId,
-          storedDocument.active_revision_sha256
-        );
+        const rows = await client.listAuthorStyleSections(source.documentId);
 
         const documentMatches = storedDocument.author_key === local.authorKey
           && storedDocument.style_scope === local.styleScope
           && storedDocument.display_name === local.displayName
           && storedDocument.source_path_key === local.sourcePathKey
-          && storedDocument.active_revision_sha256 === local.revisionSha256
           && storedDocument.status === "active";
-        const revisionMatches = storedRevision.revision_sha256 === local.revisionSha256
-          && storedRevision.source_markdown === local.sourceMarkdown
-          && storedRevision.source_markdown_sha256 === local.sourceMarkdownSha256
-          && sha256(storedRevision.source_markdown) === storedRevision.source_markdown_sha256
-          && Number(storedRevision.source_bytes) === local.sourceBytes
-          && Number(storedRevision.source_line_count) === local.sourceLineCount
-          && storedRevision.parser_version === local.parserVersion
-          && storedRevision.sectioning_version === local.sectioningVersion
-          && storedRevision.routing_version === local.routingVersion
-          && jsonEquivalent(storedRevision.routing_manifest_json, local.routingManifest)
-          && jsonEquivalent(storedRevision.outline_json, local.outline)
-          && Number(storedRevision.section_count) === local.sectionCount
-          && Number(storedRevision.delivery_section_count) === local.deliverySectionCount
-          && Number(storedRevision.search_span_count) === local.searchSpanCount;
+        const snapshotMatches = storedDocument.context_sha256 === local.revisionSha256
+          && storedDocument.source_markdown === local.sourceMarkdown
+          && storedDocument.source_markdown_sha256 === local.sourceMarkdownSha256
+          && sha256(storedDocument.source_markdown) === storedDocument.source_markdown_sha256
+          && Number(storedDocument.source_bytes) === local.sourceBytes
+          && Number(storedDocument.source_line_count) === local.sourceLineCount
+          && storedDocument.parser_version === local.parserVersion
+          && storedDocument.sectioning_version === local.sectioningVersion
+          && storedDocument.routing_version === local.routingVersion
+          && jsonEquivalent(storedDocument.routing_manifest_json, local.routingManifest)
+          && jsonEquivalent(storedDocument.outline_json, local.outline)
+          && Number(storedDocument.section_count) === local.sectionCount
+          && Number(storedDocument.delivery_section_count) === local.deliverySectionCount
+          && Number(storedDocument.search_span_count) === local.searchSpanCount;
 
         const localById = new Map(local.sections.map((section) => [section.sectionId, section]));
         const sectionsMatch = rows.every((row) => {
           const expected = localById.get(row.section_id);
           return expected !== undefined
-            && row.revision_sha256 === expected.revisionSha256
             && row.context_key === expected.contextKey
             && row.parent_section_id === expected.parentSectionId
             && row.delivery_section_id === expected.deliverySectionId
@@ -157,8 +130,8 @@ export async function runDoctorAuthorStyle(_flags: CliFlags): Promise<void> {
 
         const status: DoctorStatus = !documentMatches
           ? "document_mismatch"
-          : !revisionMatches
-            ? "revision_mismatch"
+          : !snapshotMatches
+            ? "snapshot_mismatch"
             : rows.length !== local.sectionCount
               ? "section_count_mismatch"
               : !sectionsMatch
@@ -169,7 +142,7 @@ export async function runDoctorAuthorStyle(_flags: CliFlags): Promise<void> {
           displayName: local.displayName,
           status,
           sourceMarkdownSha256: local.sourceMarkdownSha256,
-          activeRevisionSha256: storedDocument.active_revision_sha256,
+          contextSha256: storedDocument.context_sha256,
           expectedSections: local.sectionCount,
           storedSections: rows.length,
           expectedDeliverySections: local.deliverySectionCount,
@@ -181,9 +154,9 @@ export async function runDoctorAuthorStyle(_flags: CliFlags): Promise<void> {
           maximumContextChars,
           maxContextChars: parseAuthorStyleRoutingManifest(local.routingManifest).maxContextChars,
           sourceMtimeMs: local.sourceMtimeMs,
-          storedSourceMtimeMs: Number(storedRevision.source_mtime_ms),
+          storedSourceMtimeMs: Number(storedDocument.source_mtime_ms),
           sourceMtimeChangedWithoutContent:
-            Number(storedRevision.source_mtime_ms) !== local.sourceMtimeMs,
+            Number(storedDocument.source_mtime_ms) !== local.sourceMtimeMs,
           warnings: routingWarning === null ? [] : [routingWarning]
         });
       } catch (error) {

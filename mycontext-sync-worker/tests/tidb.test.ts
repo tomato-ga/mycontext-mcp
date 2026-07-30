@@ -78,7 +78,7 @@ describe("TiDB sync writer", () => {
     expect(tx.commit).toHaveBeenCalledOnce();
   });
 
-  it("writes a new immutable revision and switches active inside one transaction", async () => {
+  it("replaces the current author-style snapshot inside one transaction", async () => {
     const tx = transaction([[]]);
     const repository = new TidbSyncRepository("unused", connection(tx));
 
@@ -89,18 +89,19 @@ describe("TiDB sync writer", () => {
     });
 
     const statements = vi.mocked(tx.execute).mock.calls.map(([sql]) => String(sql));
-    expect(statements.some((sql) => sql.includes("INSERT INTO author_style_revisions"))).toBe(true);
-    expect(statements.some((sql) => sql.includes("active_revision_sha256 = ?"))).toBe(true);
+    expect(statements.some((sql) => sql.includes("INSERT INTO author_style_documents"))).toBe(true);
+    expect(statements.some((sql) => sql.includes("DELETE FROM author_style_current_sections"))).toBe(true);
+    expect(statements.some((sql) => sql.includes("author_style_revisions"))).toBe(false);
     expect(tx.commit).toHaveBeenCalledOnce();
   });
 
-  it("rolls back instead of overwriting a concurrently changed active revision", async () => {
+  it("rolls back instead of overwriting a concurrently changed current snapshot", async () => {
     const expected: AuthorStyleState = {
-      activeRevisionSha256: "old",
-      activeSourceMarkdownSha256: "source",
+      contextSha256: "old",
+      sourceMarkdownSha256: "source",
       sourcePathKey: "notion:page-1"
     };
-    const tx = transaction([stateRow({ ...expected, activeRevisionSha256: "new" })]);
+    const tx = transaction([stateRow({ ...expected, contextSha256: "new" })]);
     const repository = new TidbSyncRepository("unused", connection(tx));
 
     await expect(repository.activateAuthorStyle({
@@ -161,8 +162,8 @@ function connection(tx: Tx<{ url: string }>): Connection<{ url: string }> {
 
 function stateRow(state: AuthorStyleState) {
   return [{
-    active_revision_sha256: state.activeRevisionSha256,
-    active_source_markdown_sha256: state.activeSourceMarkdownSha256,
+    context_sha256: state.contextSha256,
+    source_markdown_sha256: state.sourceMarkdownSha256,
     source_path_key: state.sourcePathKey
   }];
 }

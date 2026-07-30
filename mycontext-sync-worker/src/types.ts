@@ -21,8 +21,7 @@ export type SyncCategory =
 export type TidbTableName =
   | "notion_pages"
   | "author_style_documents"
-  | "author_style_revisions"
-  | "author_style_sections"
+  | "author_style_current_sections"
   | "editor_knowledge_documents"
   | "editor_knowledge_sections"
   | "metaskill_documents"
@@ -68,8 +67,8 @@ export interface NotionGateway {
 }
 
 export interface AuthorStyleState {
-  activeRevisionSha256: string | null;
-  activeSourceMarkdownSha256: string | null;
+  contextSha256: string;
+  sourceMarkdownSha256: string;
   sourcePathKey: string;
 }
 

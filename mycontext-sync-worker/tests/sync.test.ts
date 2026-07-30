@@ -236,8 +236,8 @@ describe("Notion-managed context synchronization", () => {
     });
     vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(sourceMarkdown));
     vi.mocked(repository.getAuthorStyleState).mockResolvedValue({
-      activeRevisionSha256: "existing-revision",
-      activeSourceMarkdownSha256: sha256("# Existing local style"),
+      contextSha256: "existing-revision",
+      sourceMarkdownSha256: sha256("# Existing local style"),
       sourcePathKey: "knowledge/ore-body-style-analysis.md"
     } satisfies AuthorStyleState);
 
@@ -253,6 +253,36 @@ describe("Notion-managed context synchronization", () => {
       notionPageId: pageId,
       expectedState: expect.objectContaining({ sourcePathKey: "knowledge/ore-body-style-analysis.md" })
     });
+    expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
+      status: "Synced",
+      tidbTables: ["author_style_documents", "author_style_current_sections"],
+      activeRevision: null
+    }));
+  });
+
+  it("rejects an Author Style page outside the configured two-page allowlist", async () => {
+    currentManaged = managedDocument({
+      documentId: "ore-body-style",
+      name: "Body style",
+      category: "Author Style",
+      schemaVersion: "author-style-v1"
+    });
+
+    const result = await processSyncMessage(message("page.properties_updated"), {
+      notion,
+      repository,
+      authorStylePageIds: {
+        "ore-title-style": "title-page",
+        "ore-body-style": "different-body-page"
+      }
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      reason: "author_style_page_not_allowed"
+    });
+    expect(notion.getMarkdown).not.toHaveBeenCalled();
+    expect(repository.activateAuthorStyle).not.toHaveBeenCalled();
   });
 
   it("reports Conflict when another Notion page already owns an author style", async () => {
@@ -265,8 +295,8 @@ describe("Notion-managed context synchronization", () => {
     });
     vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(document.sourceMarkdown));
     vi.mocked(repository.getAuthorStyleState).mockResolvedValue({
-      activeRevisionSha256: "existing-revision",
-      activeSourceMarkdownSha256: sha256("# Existing style"),
+      contextSha256: "existing-revision",
+      sourceMarkdownSha256: sha256("# Existing style"),
       sourcePathKey: "notion:another-page"
     });
 
@@ -283,11 +313,54 @@ describe("Notion-managed context synchronization", () => {
     }));
   });
 
+  it("moves author-style ownership only when Original Page ID declares the current owner", async () => {
+    const previousPageId = "22222222-2222-2222-2222-222222222222";
+    const document = authorStyleDocument("# Notion style v2", "notion-revision-v2");
+    currentManaged = managedDocument({
+      documentId: "ore-body-style",
+      name: "Body style v2",
+      category: "Author Style",
+      schemaVersion: "author-style-v1",
+      originalPageId: previousPageId
+    });
+    vi.mocked(notion.findByDocumentId).mockResolvedValue([
+      { ...currentManaged },
+      managedDocument({
+        pageId: previousPageId,
+        documentId: "ore-body-style",
+        name: "Body style",
+        category: "Author Style",
+        schemaVersion: "author-style-v1",
+        status: "Synced"
+      })
+    ]);
+    vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(document.sourceMarkdown));
+    const state: AuthorStyleState = {
+      contextSha256: "existing-revision",
+      sourceMarkdownSha256: sha256("# Existing style"),
+      sourcePathKey: `notion:${previousPageId}`
+    };
+    vi.mocked(repository.getAuthorStyleState).mockResolvedValue(state);
+
+    const result = await processSyncMessage(message("page.properties_updated"), {
+      notion,
+      repository,
+      parseAuthorStyle: () => document
+    });
+
+    expect(result).toMatchObject({ status: "synced", revisionSha256: "notion-revision-v2" });
+    expect(repository.activateAuthorStyle).toHaveBeenCalledWith({
+      document,
+      notionPageId: pageId,
+      expectedState: state
+    });
+  });
+
   it("activates a changed author style after Notion already owns it", async () => {
     const document = authorStyleDocument("# Updated style", "updated-revision");
     const state: AuthorStyleState = {
-      activeRevisionSha256: "old-revision",
-      activeSourceMarkdownSha256: sha256("# Old style"),
+      contextSha256: "old-revision",
+      sourceMarkdownSha256: sha256("# Old style"),
       sourcePathKey: `notion:${pageId}`
     };
     currentManaged = managedDocument({

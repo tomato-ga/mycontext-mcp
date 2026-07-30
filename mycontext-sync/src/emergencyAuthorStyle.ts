@@ -9,7 +9,7 @@ import { AppError } from "./types.js";
 
 export interface EmergencySnapshotMetadata {
   document_id: string;
-  source: "tidb-active-revision";
+  source: "tidb-current-snapshot" | "tidb-active-revision";
   source_path_key: string;
   revision_sha256: string;
   markdown_sha256: string;

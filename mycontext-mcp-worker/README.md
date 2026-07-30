@@ -16,7 +16,7 @@ endpoint at `/healthz`.
   no TCP/mysql2 connection is used.
 - Data access: read-only SQL against `notion_pages`,
   `editor_knowledge_documents`, `business_knowledge_documents`, and
-  `business_knowledge_sections`, plus the three dedicated `author_style_*`
+  `business_knowledge_sections`, plus the two dedicated `author_style_*`
   and three dedicated `metaskill_*` tables. Full general documents use a fixed
   Worker-side `UNION ALL` read model; author style and Metaskill remain on
   dedicated retrieval paths.
@@ -148,8 +148,7 @@ GRANT SELECT ON notion_context.editor_knowledge_documents TO '<reader-user>'@'%'
 GRANT SELECT ON notion_context.business_knowledge_documents TO '<reader-user>'@'%';
 GRANT SELECT ON notion_context.business_knowledge_sections TO '<reader-user>'@'%';
 GRANT SELECT ON notion_context.author_style_documents TO '<reader-user>'@'%';
-GRANT SELECT ON notion_context.author_style_revisions TO '<reader-user>'@'%';
-GRANT SELECT ON notion_context.author_style_sections TO '<reader-user>'@'%';
+GRANT SELECT ON notion_context.author_style_current_sections TO '<reader-user>'@'%';
 GRANT SELECT ON notion_context.metaskill_documents TO '<reader-user>'@'%';
 GRANT SELECT ON notion_context.metaskill_revisions TO '<reader-user>'@'%';
 GRANT SELECT ON notion_context.metaskill_sections TO '<reader-user>'@'%';

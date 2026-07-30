@@ -12,6 +12,8 @@ import { runMigrate } from "./commands/migrate.js";
 import { runMigrateBusinessKnowledge } from "./commands/migrateBusinessKnowledge.js";
 import { runMigrateEditorKnowledge } from "./commands/migrateEditorKnowledge.js";
 import { runMigrateAuthorStyle } from "./commands/migrateAuthorStyle.js";
+import { runTransitionAuthorStyleCurrent } from "./commands/transitionAuthorStyleCurrent.js";
+import { runFinalizeAuthorStyleCurrent } from "./commands/finalizeAuthorStyleCurrent.js";
 import { runMigrateMetaskill } from "./commands/migrateMetaskill.js";
 import { runMigrateSyncStateLog } from "./commands/migrateSyncStateLog.js";
 import { runPull } from "./commands/pull.js";
@@ -44,6 +46,12 @@ try {
       break;
     case "migrate-author-style":
       await runMigrateAuthorStyle(flags);
+      break;
+    case "transition-author-style-current":
+      await runTransitionAuthorStyleCurrent(flags);
+      break;
+    case "finalize-author-style-current":
+      await runFinalizeAuthorStyleCurrent(flags);
       break;
     case "migrate-metaskill":
       await runMigrateMetaskill(flags);

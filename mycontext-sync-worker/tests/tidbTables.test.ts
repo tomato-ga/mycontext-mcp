@@ -11,8 +11,7 @@ describe("TiDB table routing metadata", () => {
       "AI Skill": ["notion_pages"],
       "Author Style": [
         "author_style_documents",
-        "author_style_revisions",
-        "author_style_sections"
+        "author_style_current_sections"
       ],
       "Editor Knowledge": [
         "editor_knowledge_documents",
@@ -62,8 +61,7 @@ describe("TiDB table routing metadata", () => {
       schemaVersion: "author-style-v2"
     })).toEqual([
       "author_style_documents",
-      "author_style_revisions",
-      "author_style_sections"
+      "author_style_current_sections"
     ]);
   });
 });

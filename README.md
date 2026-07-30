@@ -12,16 +12,16 @@ Notion pages
   -> TiDB notion_pages
 Notion MyContext Documents (Status = Ready)
   -> mycontext-sync-worker webhook + Queue
-  -> validated TiDB revisions / sections
+  -> validated TiDB current snapshots / sections
 noteAI editor knowledge Markdown
   -> mycontext-sync
   -> TiDB editor_knowledge_documents
 Claude skill business knowledge Markdown (fixed 2 files)
   -> mycontext-sync section-aware parser
   -> TiDB business_knowledge_documents + business_knowledge_sections
-noteAI author-style Markdown (fixed title/body files)
-  -> mycontext-sync semantic parser + routing manifest
-  -> TiDB author_style_documents + revisions + sections
+Notion author-style pages (fixed title/body pages)
+  -> mycontext-sync-worker semantic parser + routing manifest
+  -> TiDB author_style_documents + author_style_current_sections
 Kindle Metaskill transcription (fixed 1 file)
   -> mycontext-sync semantic parser + topic routing manifest
   -> TiDB metaskill_documents + revisions + sections
@@ -58,7 +58,7 @@ TiDB notion_pages
 
 ## データモデル
 
-保存先は用途別の10テーブルです。
+保存先は用途別の9テーブルです。
 
 ```sql
 notion_pages(
@@ -118,23 +118,17 @@ author_style_documents(
   document_id,
   author_key,
   style_scope,
-  active_revision_sha256,
-  status
-)
-
-author_style_revisions(
-  document_id,
-  revision_sha256,
+  context_sha256,
   source_markdown,
   routing_manifest_json,
   section_count,
   delivery_section_count,
-  search_span_count
+  search_span_count,
+  status
 )
 
-author_style_sections(
+author_style_current_sections(
   document_id,
-  revision_sha256,
   section_id,
   context_key,
   delivery_section_id,
@@ -186,14 +180,14 @@ metaskill_sections(
 6. `pnpm doctor-editor-knowledge` でローカルMarkdownとTiDBのハッシュ一致を検証する。
 7. `.env` の `BUSINESS_KNOWLEDGE_SOURCE_ROOT` を設定し、`pnpm migrate-business-knowledge`で専用2テーブルだけを作成する。
 8. `pnpm pull-business-knowledge`で固定2文書をsection-aware同期し、`pnpm doctor-business-knowledge`で原文・section revision・件数・hashを検証する。
-9. `.env` の `AUTHOR_STYLE_SOURCE_ROOT` を設定し、`pnpm migrate-author-style`、`pnpm pull-author-style`、`pnpm doctor-author-style`で固定2文書と全routing組合せを検証する。
+9. `pnpm migrate-author-style`でAuthor Styleのcurrent-snapshot tableを準備し、固定された2つのNotionページを同期Workerで検証・同期する。ローカル`pull-author-style`は緊急復旧用で、Notion所有中の文書を上書きしない。
 10. `.env` の `METASKILL_SOURCE_ROOT` を設定し、`pnpm migrate-metaskill`、`pnpm pull-metaskill`、`pnpm doctor-metaskill`で固定1文書・意味section・全topic routingを検証する。
 11. `pnpm run search` でNotion Markdownをローカル検証できる。
 12. 必要に応じて `pnpm export-obsidian` で Obsidian vault の `_notion_pages/` に Markdown を書き出す。
 
 Obsidian export は Notion API を呼びません。TiDB に保存済みの内容をローカルファイルへ反映するだけです。
 
-Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README.md`を参照してください。Statusが`Ready`になったページだけを処理し、失敗時はactive revisionを維持します。
+Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README.md`を参照してください。Statusが`Ready`になったページだけを処理し、失敗時はcurrent snapshotを維持します。
 
 ## Remote MCP
 
@@ -311,7 +305,7 @@ pnpm exec wrangler deploy --dry-run
 
 Notion data sourceのプロパティ、Queue作成、secret、初回Webhook検証は[専用README](mycontext-sync-worker/README.md)を参照してください。
 
-緊急Markdownは通常同期に使わず、TiDB active revisionのexportと明示的restoreだけに限定します。
+緊急Markdownは通常同期に使わず、TiDB current snapshotのexportと明示的restoreだけに限定します。
 
 ```bash
 cd mycontext-sync
@@ -352,7 +346,7 @@ pnpm doctor-author-style
 - TiDBには用途別テーブルで全文Markdownを保存し、business knowledgeだけは著者定義section treeも保存する。文字数によるsection結合・分割はしない。
 - Business検索は最小sectionで行い、AIへは`delivery_section_id`が示す意味完結した親sectionを返す（Small2Big）。
 - Business同期は新規2テーブルと固定2文書IDだけへUPSERTし、`DELETE`/`TRUNCATE`/`DROP`を持たない。
-- Author styleは3専用テーブルへ細粒度保存するが、AIにはWorkerが選択・結合した1コンテキストパックを返す。通常経路で全文や任意文字chunkを読ませない。
+- Author styleは2専用テーブルへ現在値だけを細粒度保存し、`context_sha256`を履歴ではなく同一性確認に使う。AIにはWorkerが選択・結合した1コンテキストパックを返し、通常経路で全文や任意文字chunkを読ませない。
 - 公開MCP Workerはread-onlyにする。Notion APIとTiDB書き込みは、credentialを分離した同期CLIまたは同期専用Workerに閉じる。
 - Obsidian は Worker から直接触らず、ローカル export と launchd で扱う。
 - embedding や chunk table は、必要性が確認できるまで入れない。

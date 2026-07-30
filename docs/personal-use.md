@@ -40,9 +40,10 @@ is absent, the CLI reads `mirror.config.json` as before.
 The absolute value is never stored in TiDB or exposed by MCP; TiDB stores only
 the public-safe relative source key.
 
-`AUTHOR_STYLE_SOURCE_ROOT` is also local-only. The author-style sync reads only
-the fixed title/body paths under `knowledge/`; TiDB stores relative source keys,
-full Markdown revisions, and semantic sections, never the machine-local root.
+`AUTHOR_STYLE_SOURCE_ROOT` is local-only and reserved for explicit emergency
+restore/diagnostic commands. Normal author-style synchronization accepts only
+the two configured Notion pages. TiDB stores one current source snapshot and
+current semantic sections, never historical revisions or the machine-local root.
 
 For the business corpus, use the dedicated migration and sync commands. They
 only create/write `business_knowledge_documents` and
@@ -54,8 +55,6 @@ pnpm migrate-business-knowledge
 pnpm pull-business-knowledge
 pnpm doctor-business-knowledge
 pnpm migrate-author-style
-pnpm pull-author-style
-pnpm doctor-author-style
 ```
 
 ## Production Secrets

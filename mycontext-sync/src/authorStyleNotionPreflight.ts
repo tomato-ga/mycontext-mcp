@@ -3,7 +3,7 @@ import type {
   LoadedAuthorStyleDocument
 } from "./authorStyle.js";
 import type {
-  AuthorStyleRevisionRow,
+  AuthorStyleDocumentRow,
   AuthorStyleSectionRow
 } from "./tidb.js";
 
@@ -11,10 +11,10 @@ export interface AuthorStyleNotionPreflightResult {
   status: "exact_match" | "content_change_required";
   ownership_change_only: boolean;
   source_markdown_matches: boolean;
-  revision_matches: boolean;
+  context_matches: boolean;
   ai_read_model_matches: boolean;
-  notion_revision_sha256: string;
-  tidb_revision_sha256: string;
+  notion_context_sha256: string;
+  tidb_context_sha256: string;
   notion_source_markdown_sha256: string;
   tidb_source_markdown_sha256: string;
   notion_sections: number;
@@ -26,7 +26,7 @@ export interface AuthorStyleNotionPreflightResult {
 
 export function compareAuthorStyleNotionMigration(input: {
   notion: LoadedAuthorStyleDocument;
-  tidbRevision: AuthorStyleRevisionRow;
+  tidbDocument: AuthorStyleDocumentRow;
   tidbSections: AuthorStyleSectionRow[];
 }): AuthorStyleNotionPreflightResult {
   const tidbById = new Map(input.tidbSections.map((section) => [section.section_id, section]));
@@ -41,23 +41,23 @@ export function compareAuthorStyleNotionMigration(input: {
     .map((section) => section.sectionId)
     .sort();
   const sourceMarkdownMatches = input.notion.sourceMarkdownSha256
-    === input.tidbRevision.source_markdown_sha256;
-  const revisionMatches = input.notion.revisionSha256 === input.tidbRevision.revision_sha256;
+    === input.tidbDocument.source_markdown_sha256;
+  const contextMatches = input.notion.revisionSha256 === input.tidbDocument.context_sha256;
   const aiReadModelMatches = missingSectionIds.length === 0
     && extraSectionIds.length === 0
     && changedSectionIds.length === 0;
-  const ownershipChangeOnly = sourceMarkdownMatches && revisionMatches && aiReadModelMatches;
+  const ownershipChangeOnly = sourceMarkdownMatches && contextMatches && aiReadModelMatches;
 
   return {
     status: ownershipChangeOnly ? "exact_match" : "content_change_required",
     ownership_change_only: ownershipChangeOnly,
     source_markdown_matches: sourceMarkdownMatches,
-    revision_matches: revisionMatches,
+    context_matches: contextMatches,
     ai_read_model_matches: aiReadModelMatches,
-    notion_revision_sha256: input.notion.revisionSha256,
-    tidb_revision_sha256: input.tidbRevision.revision_sha256,
+    notion_context_sha256: input.notion.revisionSha256,
+    tidb_context_sha256: input.tidbDocument.context_sha256,
     notion_source_markdown_sha256: input.notion.sourceMarkdownSha256,
-    tidb_source_markdown_sha256: input.tidbRevision.source_markdown_sha256,
+    tidb_source_markdown_sha256: input.tidbDocument.source_markdown_sha256,
     notion_sections: input.notion.sections.length,
     tidb_sections: input.tidbSections.length,
     missing_section_ids: missingSectionIds,
@@ -70,8 +70,7 @@ function sectionMatches(
   notion: AuthorStyleSection,
   tidb: AuthorStyleSectionRow
 ): boolean {
-  return notion.revisionSha256 === tidb.revision_sha256
-    && notion.contextKey === tidb.context_key
+  return notion.contextKey === tidb.context_key
     && notion.parentSectionId === tidb.parent_section_id
     && notion.deliverySectionId === tidb.delivery_section_id
     && notion.sectionType === tidb.section_type

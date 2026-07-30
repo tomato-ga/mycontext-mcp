@@ -58,7 +58,8 @@ export default {
     }
     const dependencies = {
       notion: new NotionApiClient(config),
-      repository: new TidbSyncRepository(config.tidbDatabaseUrl)
+      repository: new TidbSyncRepository(config.tidbDatabaseUrl),
+      authorStylePageIds: config.authorStylePageIds
     };
     for (const message of batch.messages) {
       try {

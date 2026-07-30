@@ -970,13 +970,10 @@ export async function getAuthorStyleContext(
     `SELECT
         documents.document_id,
         documents.display_name,
-        revisions.revision_sha256,
-        revisions.routing_version,
-        revisions.routing_manifest_json
+        documents.context_sha256 AS revision_sha256,
+        documents.routing_version,
+        documents.routing_manifest_json
       FROM author_style_documents AS documents
-      INNER JOIN author_style_revisions AS revisions
-        ON revisions.document_id = documents.document_id
-       AND revisions.revision_sha256 = documents.active_revision_sha256
       WHERE documents.document_id = ?
         AND documents.status = 'active'
       LIMIT 1`,
@@ -996,12 +993,11 @@ export async function getAuthorStyleContext(
   const placeholders = contextKeys.map(() => "?").join(", ");
   const sectionRows = await client.execute(
     `SELECT section_id, context_key, title, delivery_markdown, ordinal
-      FROM author_style_sections
+      FROM author_style_current_sections
       WHERE document_id = ?
-        AND revision_sha256 = ?
         AND context_key IN (${placeholders})
       ORDER BY ordinal ASC`,
-    [documentId, revisionSha256, ...contextKeys]
+    [documentId, ...contextKeys]
   );
   const byContextKey = new Map(sectionRows.map((row) => {
     const contextKey = parseRequiredString(row.context_key, "context_key");
@@ -1067,7 +1063,7 @@ export async function searchAuthorStyleEvidence(
     `WITH evidence_matches AS (
         SELECT
           documents.document_id,
-          documents.active_revision_sha256 AS revision_sha256,
+          documents.context_sha256 AS revision_sha256,
           matched.section_id AS matched_section_id,
           matched.title AS matched_section_title,
           matched.content_layer AS matched_content_layer,
@@ -1088,12 +1084,10 @@ export async function searchAuthorStyleEvidence(
                      matched.section_id ASC
           ) AS delivery_match_rank
         FROM author_style_documents AS documents
-        INNER JOIN author_style_sections AS matched
+        INNER JOIN author_style_current_sections AS matched
           ON matched.document_id = documents.document_id
-         AND matched.revision_sha256 = documents.active_revision_sha256
-        INNER JOIN author_style_sections AS delivery
+        INNER JOIN author_style_current_sections AS delivery
           ON delivery.document_id = matched.document_id
-         AND delivery.revision_sha256 = matched.revision_sha256
          AND delivery.section_id = matched.delivery_section_id
         WHERE documents.document_id = ?
           AND documents.status = 'active'
@@ -1123,13 +1117,10 @@ export async function getAuthorStyleDocumentResource(
     `SELECT
         documents.document_id,
         documents.display_name,
-        revisions.revision_sha256,
-        revisions.source_markdown_sha256,
-        revisions.source_markdown
+        documents.context_sha256 AS revision_sha256,
+        documents.source_markdown_sha256,
+        documents.source_markdown
       FROM author_style_documents AS documents
-      INNER JOIN author_style_revisions AS revisions
-        ON revisions.document_id = documents.document_id
-       AND revisions.revision_sha256 = documents.active_revision_sha256
       WHERE documents.document_id = ?
         AND documents.status = 'active'
       LIMIT 1`,
@@ -1157,7 +1148,7 @@ export async function listAuthorStyleResources(
   const rows = await client.execute(
     `SELECT
         sections.document_id,
-        sections.revision_sha256,
+        documents.context_sha256 AS revision_sha256,
         sections.section_id,
         sections.context_key,
         sections.title,
@@ -1165,9 +1156,8 @@ export async function listAuthorStyleResources(
         sections.content_layer,
         OCTET_LENGTH(sections.delivery_markdown) AS size_bytes
       FROM author_style_documents AS documents
-      INNER JOIN author_style_sections AS sections
+      INNER JOIN author_style_current_sections AS sections
         ON sections.document_id = documents.document_id
-       AND sections.revision_sha256 = documents.active_revision_sha256
       WHERE documents.status = 'active'
         AND sections.section_id = sections.delivery_section_id
         AND sections.context_key IS NOT NULL
@@ -1184,7 +1174,7 @@ export async function getAuthorStyleSectionResource(
   const rows = await client.execute(
     `SELECT
         sections.document_id,
-        sections.revision_sha256,
+        documents.context_sha256 AS revision_sha256,
         sections.section_id,
         sections.context_key,
         sections.title,
@@ -1195,9 +1185,8 @@ export async function getAuthorStyleSectionResource(
         sections.source_line_start,
         sections.source_line_end
       FROM author_style_documents AS documents
-      INNER JOIN author_style_sections AS sections
+      INNER JOIN author_style_current_sections AS sections
         ON sections.document_id = documents.document_id
-       AND sections.revision_sha256 = documents.active_revision_sha256
       WHERE documents.document_id = ?
         AND documents.status = 'active'
         AND sections.section_id = ?
@@ -1499,9 +1488,8 @@ export async function checkHealth(client: TidbClient): Promise<HealthCheckResult
             COALESCE(SUM(CASE WHEN sections.section_type = 'search_span' THEN 1 ELSE 0 END), 0)
               AS author_style_search_spans_count
           FROM author_style_documents AS documents
-          LEFT JOIN author_style_sections AS sections
+          LEFT JOIN author_style_current_sections AS sections
             ON sections.document_id = documents.document_id
-           AND sections.revision_sha256 = documents.active_revision_sha256
           WHERE documents.status = 'active'
         ),
         active_metaskill_health AS (

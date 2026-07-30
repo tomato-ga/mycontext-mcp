@@ -8,7 +8,11 @@ const config: SyncConfig = {
   notionApiToken: "token",
   notionDataSourceId: "data-source",
   notionWebhookBootstrapSecret: "bootstrap",
-  notionWebhookVerificationToken: "verification-token"
+  notionWebhookVerificationToken: "verification-token",
+  authorStylePageIds: {
+    "ore-title-style": "title-page",
+    "ore-body-style": "body-page"
+  }
 };
 
 describe("Notion webhook", () => {

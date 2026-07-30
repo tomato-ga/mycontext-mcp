@@ -42,9 +42,9 @@ export async function runPreflightAuthorStyleNotion(flags: CliFlags): Promise<vo
       sourceMtimeMs: 0
     });
     const storedDocument = await client.getAuthorStyleDocument(documentId);
-    if (storedDocument?.active_revision_sha256 === null || storedDocument === null) {
+    if (storedDocument === null) {
       console.log(JSON.stringify({
-        status: "tidb_active_revision_missing",
+        status: "tidb_current_snapshot_missing",
         document_id: documentId,
         page_id: pageId,
         tidb_writes: false,
@@ -52,21 +52,11 @@ export async function runPreflightAuthorStyleNotion(flags: CliFlags): Promise<vo
       }, null, 2));
       return;
     }
-    const [revision, sections] = await Promise.all([
-      client.getAuthorStyleRevision(documentId, storedDocument.active_revision_sha256),
-      client.listAuthorStyleSections(documentId, storedDocument.active_revision_sha256)
-    ]);
-    if (revision === null) {
-      throw new AppError(
-        "preflight_revision_missing",
-        `active revision row not found: ${storedDocument.active_revision_sha256}`,
-        3
-      );
-    }
+    const sections = await client.listAuthorStyleSections(documentId);
     console.log(JSON.stringify({
       ...compareAuthorStyleNotionMigration({
         notion: parsed,
-        tidbRevision: revision,
+        tidbDocument: storedDocument,
         tidbSections: sections
       }),
       document_id: documentId,

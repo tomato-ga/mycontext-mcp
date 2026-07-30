@@ -5,7 +5,7 @@ import type {
 } from "../src/authorStyle.js";
 import { compareAuthorStyleNotionMigration } from "../src/authorStyleNotionPreflight.js";
 import type {
-  AuthorStyleRevisionRow,
+  AuthorStyleDocumentRow,
   AuthorStyleSectionRow
 } from "../src/tidb.js";
 
@@ -14,7 +14,7 @@ describe("author-style Notion migration preflight", () => {
     const notion = document();
     const result = compareAuthorStyleNotionMigration({
       notion,
-      tidbRevision: revision(notion),
+      tidbDocument: documentRow(notion),
       tidbSections: notion.sections.map(sectionRow)
     });
 
@@ -22,6 +22,7 @@ describe("author-style Notion migration preflight", () => {
       status: "exact_match",
       ownership_change_only: true,
       source_markdown_matches: true,
+      context_matches: true,
       ai_read_model_matches: true
     });
   });
@@ -32,7 +33,7 @@ describe("author-style Notion migration preflight", () => {
     rows[0] = { ...rows[0]!, delivery_markdown: "changed" };
     const result = compareAuthorStyleNotionMigration({
       notion,
-      tidbRevision: { ...revision(notion), source_markdown_sha256: "different" },
+      tidbDocument: { ...documentRow(notion), source_markdown_sha256: "different" },
       tidbSections: rows
     });
 
@@ -101,10 +102,14 @@ function baseSection(): AuthorStyleSection {
   };
 }
 
-function revision(document: LoadedAuthorStyleDocument): AuthorStyleRevisionRow {
+function documentRow(document: LoadedAuthorStyleDocument): AuthorStyleDocumentRow {
   return {
     document_id: document.documentId,
-    revision_sha256: document.revisionSha256,
+    author_key: document.authorKey,
+    style_scope: document.styleScope,
+    display_name: document.displayName,
+    source_path_key: document.sourcePathKey,
+    context_sha256: document.revisionSha256,
     source_markdown: document.sourceMarkdown,
     source_markdown_sha256: document.sourceMarkdownSha256,
     source_bytes: document.sourceBytes,
@@ -118,14 +123,14 @@ function revision(document: LoadedAuthorStyleDocument): AuthorStyleRevisionRow {
     section_count: document.sectionCount,
     delivery_section_count: document.deliverySectionCount,
     search_span_count: document.searchSpanCount,
-    synced_at: "2026-07-22T00:00:00.000Z"
-  } as AuthorStyleRevisionRow;
+    status: "active",
+    last_synced_at: "2026-07-22T00:00:00.000Z"
+  } as AuthorStyleDocumentRow;
 }
 
 function sectionRow(section: AuthorStyleSection): AuthorStyleSectionRow {
   return {
     document_id: section.documentId,
-    revision_sha256: section.revisionSha256,
     section_id: section.sectionId,
     context_key: section.contextKey,
     parent_section_id: section.parentSectionId,

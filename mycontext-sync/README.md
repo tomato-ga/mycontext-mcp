@@ -12,9 +12,11 @@ The fixed two-document business corpus is stored in
 `business_knowledge_documents` plus versioned `business_knowledge_sections`.
 Its boundaries come from H2/H3 headings or numbered `§` entries, never a
 character-count splitter.
-The two fixed author-style documents use three dedicated revisioned tables.
-They are stored as semantic delivery/search units; runtime selection happens
-server-side so an AI receives one complete context pack per request.
+The two fixed author-style documents use two current-snapshot tables.
+The document row holds the current source and routing manifest, while
+`author_style_current_sections` holds only its current semantic delivery/search
+units. Runtime selection happens server-side so an AI receives one complete
+context pack per request.
 The fixed Metaskill transcription follows the same append-only three-table
 pattern, with topic/intent/depth routing over complete semantic sections.
 
@@ -89,6 +91,8 @@ pnpm pull-business-knowledge
 pnpm pull-business-knowledge -- --dry-run
 pnpm doctor-business-knowledge
 pnpm migrate-author-style
+pnpm transition-author-style-current
+pnpm finalize-author-style-current
 pnpm pull-author-style
 pnpm pull-author-style -- --dry-run
 pnpm doctor-author-style
@@ -159,7 +163,7 @@ LaunchAgent plist local because it usually contains machine-specific paths.
 
 ## Database Shape
 
-These ten application tables are required:
+These nine application tables are required:
 
 ```sql
 notion_pages(page_id, title, markdown, markdown_sha256, truncated,
@@ -181,15 +185,12 @@ business_knowledge_sections(document_id, section_id,
   created_at, updated_at)
 
 author_style_documents(document_id, author_key, style_scope, display_name,
-  source_path_key, active_revision_sha256, status, last_synced_at,
-  created_at, updated_at)
-
-author_style_revisions(document_id, revision_sha256, source_markdown,
-  source_markdown_sha256, parser_version, sectioning_version, routing_version,
+  source_path_key, context_sha256, source_markdown, source_markdown_sha256,
+  parser_version, sectioning_version, routing_version,
   routing_manifest_json, outline_json, section_count, delivery_section_count,
-  search_span_count, synced_at, created_at)
+  search_span_count, status, last_synced_at, created_at, updated_at)
 
-author_style_sections(document_id, revision_sha256, section_id, context_key,
+author_style_current_sections(document_id, section_id, context_key,
   parent_section_id, delivery_section_id, section_type, content_layer,
   context_priority, heading_path_json, aliases_json, ordinal,
   direct_markdown, delivery_markdown, retrieval_text, content_sha256,
@@ -214,8 +215,8 @@ Business section rows are revisioned by source content plus parser versions.
 The sync does not delete old revisions and never writes to `notion_pages` or
 `editor_knowledge_documents`. Retention or cleanup is intentionally outside
 these commands.
-Author-style revisions follow the same append-only rule. The document row is
-switched to a new active revision only after its revision and all section rows
-are written in one transaction.
+Author style is intentionally not revisioned in TiDB. A sync replaces the
+document snapshot and that document's current sections in one transaction.
+`context_sha256` is an integrity/idempotency fingerprint, not a history key.
 Metaskill revisions use the same atomic active-revision switch and retain the
 raw transcription in `source_markdown`.

@@ -57,8 +57,7 @@ describe("Notion MyContext data source", () => {
       status: "Synced",
       tidbTables: [
         "author_style_documents",
-        "author_style_revisions",
-        "author_style_sections"
+        "author_style_current_sections"
       ],
       syncedHash: "a".repeat(64),
       activeRevision: "b".repeat(64),
@@ -73,8 +72,7 @@ describe("Notion MyContext data source", () => {
     expect(body.properties["TiDB Tables"]).toEqual({
       multi_select: [
         { name: "author_style_documents" },
-        { name: "author_style_revisions" },
-        { name: "author_style_sections" }
+        { name: "author_style_current_sections" }
       ]
     });
     expect(body.properties).not.toHaveProperty("Name");

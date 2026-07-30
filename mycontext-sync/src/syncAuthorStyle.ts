@@ -7,7 +7,7 @@ import { AppError, type PageSyncStatus } from "./types.js";
 
 export interface AuthorStyleWriter {
   getAuthorStyleDocumentState(documentId: string): Promise<{
-    activeRevisionSha256: string | null;
+    contextSha256: string;
     sourcePathKey: string;
   } | null>;
   upsertAuthorStyleDocumentAndSections(document: LoadedAuthorStyleDocument): Promise<void>;
@@ -51,8 +51,8 @@ export async function syncAuthorStyleDocument(options: {
         3
       );
     }
-    const activeRevision = state?.activeRevisionSha256 ?? null;
-    dbSkipped = !options.reindex && activeRevision === document.revisionSha256;
+    const currentContext = state?.contextSha256 ?? null;
+    dbSkipped = !options.reindex && currentContext === document.revisionSha256;
     if (!dbSkipped) {
       await options.tidbClient.upsertAuthorStyleDocumentAndSections(document);
       dbIndexed = true;

@@ -10,8 +10,7 @@ export const TIDB_TABLES_BY_CATEGORY = {
   "AI Skill": ["notion_pages"],
   "Author Style": [
     "author_style_documents",
-    "author_style_revisions",
-    "author_style_sections"
+    "author_style_current_sections"
   ],
   "Editor Knowledge": [
     "editor_knowledge_documents",

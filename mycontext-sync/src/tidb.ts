@@ -149,14 +149,7 @@ export interface AuthorStyleDocumentRow extends RowDataPacket {
   style_scope: string;
   display_name: string;
   source_path_key: string;
-  active_revision_sha256: string | null;
-  status: string;
-  last_synced_at: Date | string | null;
-}
-
-export interface AuthorStyleRevisionRow extends RowDataPacket {
-  document_id: string;
-  revision_sha256: string;
+  context_sha256: string;
   source_markdown: string;
   source_markdown_sha256: string;
   source_bytes: number | string;
@@ -170,12 +163,12 @@ export interface AuthorStyleRevisionRow extends RowDataPacket {
   section_count: number | string;
   delivery_section_count: number | string;
   search_span_count: number | string;
-  synced_at: Date | string;
+  status: string;
+  last_synced_at: Date | string | null;
 }
 
 export interface AuthorStyleSectionRow extends RowDataPacket {
   document_id: string;
-  revision_sha256: string;
   section_id: string;
   context_key: string | null;
   parent_section_id: string | null;
@@ -620,26 +613,26 @@ export class TidbClient {
     return rows[0]?.section_revision_sha256 ?? null;
   }
 
-  async getAuthorStyleDocumentRevision(documentId: string): Promise<string | null> {
-    const [rows] = await this.pool.execute<Array<RowDataPacket & { active_revision_sha256: string | null }>>(
-      `SELECT active_revision_sha256
+  async getAuthorStyleDocumentContextSha256(documentId: string): Promise<string | null> {
+    const [rows] = await this.pool.execute<Array<RowDataPacket & { context_sha256: string }>>(
+      `SELECT context_sha256
        FROM author_style_documents
        WHERE document_id = ?
        LIMIT 1`,
       [documentId]
     );
-    return rows[0]?.active_revision_sha256 ?? null;
+    return rows[0]?.context_sha256 ?? null;
   }
 
   async getAuthorStyleDocumentState(documentId: string): Promise<{
-    activeRevisionSha256: string | null;
+    contextSha256: string;
     sourcePathKey: string;
   } | null> {
     const [rows] = await this.pool.execute<Array<RowDataPacket & {
-      active_revision_sha256: string | null;
+      context_sha256: string;
       source_path_key: string;
     }>>(
-      `SELECT active_revision_sha256, source_path_key
+      `SELECT context_sha256, source_path_key
        FROM author_style_documents
        WHERE document_id = ?
        LIMIT 1`,
@@ -649,7 +642,7 @@ export class TidbClient {
     return row === undefined
       ? null
       : {
-          activeRevisionSha256: row.active_revision_sha256,
+          contextSha256: row.context_sha256,
           sourcePathKey: row.source_path_key
         };
   }
@@ -661,30 +654,17 @@ export class TidbClient {
       await connection.execute(
         `INSERT INTO author_style_documents
           (document_id, author_key, style_scope, display_name, source_path_key,
-           active_revision_sha256, status, last_synced_at)
-         VALUES (?, ?, ?, ?, ?, NULL, 'active', NULL)
+           context_sha256, source_markdown, source_markdown_sha256, source_bytes,
+           source_line_count, source_mtime_ms, parser_version, sectioning_version,
+           routing_version, routing_manifest_json, outline_json, section_count,
+           delivery_section_count, search_span_count, status, last_synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW(3))
          ON DUPLICATE KEY UPDATE
           author_key = VALUES(author_key),
           style_scope = VALUES(style_scope),
           display_name = VALUES(display_name),
           source_path_key = VALUES(source_path_key),
-          status = 'active'`,
-        [
-          document.documentId,
-          document.authorKey,
-          document.styleScope,
-          document.displayName,
-          document.sourcePathKey
-        ]
-      );
-      await connection.execute(
-        `INSERT INTO author_style_revisions
-          (document_id, revision_sha256, source_markdown, source_markdown_sha256,
-           source_bytes, source_line_count, source_mtime_ms, parser_version,
-           sectioning_version, routing_version, routing_manifest_json, outline_json,
-           section_count, delivery_section_count, search_span_count, synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))
-         ON DUPLICATE KEY UPDATE
+          context_sha256 = VALUES(context_sha256),
           source_markdown = VALUES(source_markdown),
           source_markdown_sha256 = VALUES(source_markdown_sha256),
           source_bytes = VALUES(source_bytes),
@@ -698,9 +678,14 @@ export class TidbClient {
           section_count = VALUES(section_count),
           delivery_section_count = VALUES(delivery_section_count),
           search_span_count = VALUES(search_span_count),
-          synced_at = NOW(3)`,
+          status = 'active',
+          last_synced_at = NOW(3)`,
         [
           document.documentId,
+          document.authorKey,
+          document.styleScope,
+          document.displayName,
+          document.sourcePathKey,
           document.revisionSha256,
           document.sourceMarkdown,
           document.sourceMarkdownSha256,
@@ -717,15 +702,14 @@ export class TidbClient {
           document.searchSpanCount
         ]
       );
+      await connection.execute(
+        `DELETE FROM author_style_current_sections
+         WHERE document_id = ?`,
+        [document.documentId]
+      );
       for (const section of document.sections) {
         await upsertAuthorStyleSection(connection, section);
       }
-      await connection.execute(
-        `UPDATE author_style_documents
-         SET active_revision_sha256 = ?, last_synced_at = NOW(3)
-         WHERE document_id = ?`,
-        [document.revisionSha256, document.documentId]
-      );
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -738,7 +722,11 @@ export class TidbClient {
   async getAuthorStyleDocument(documentId: string): Promise<AuthorStyleDocumentRow | null> {
     const [rows] = await this.pool.execute<AuthorStyleDocumentRow[]>(
       `SELECT document_id, author_key, style_scope, display_name, source_path_key,
-              active_revision_sha256, status, last_synced_at
+              context_sha256, source_markdown, source_markdown_sha256,
+              source_bytes, source_line_count, source_mtime_ms, parser_version,
+              sectioning_version, routing_version, routing_manifest_json,
+              outline_json, section_count, delivery_section_count, search_span_count,
+              status, last_synced_at
        FROM author_style_documents
        WHERE document_id = ?
        LIMIT 1`,
@@ -747,38 +735,18 @@ export class TidbClient {
     return rows[0] ?? null;
   }
 
-  async getAuthorStyleRevision(
-    documentId: string,
-    revisionSha256: string
-  ): Promise<AuthorStyleRevisionRow | null> {
-    const [rows] = await this.pool.execute<AuthorStyleRevisionRow[]>(
-      `SELECT document_id, revision_sha256, source_markdown, source_markdown_sha256,
-              source_bytes, source_line_count, source_mtime_ms, parser_version,
-              sectioning_version, routing_version, routing_manifest_json, outline_json,
-              section_count, delivery_section_count, search_span_count, synced_at
-       FROM author_style_revisions
-       WHERE document_id = ? AND revision_sha256 = ?
-       LIMIT 1`,
-      [documentId, revisionSha256]
-    );
-    return rows[0] ?? null;
-  }
-
-  async listAuthorStyleSections(
-    documentId: string,
-    revisionSha256: string
-  ): Promise<AuthorStyleSectionRow[]> {
+  async listAuthorStyleSections(documentId: string): Promise<AuthorStyleSectionRow[]> {
     const [rows] = await this.pool.execute<AuthorStyleSectionRow[]>(
-      `SELECT document_id, revision_sha256, section_id, context_key,
+      `SELECT document_id, section_id, context_key,
               parent_section_id, delivery_section_id, section_type, content_layer,
               context_priority, heading_level, title, heading_path_json, aliases_json,
               ordinal, source_line_start, source_line_end, content_chars,
               estimated_tokens, direct_markdown, delivery_markdown, retrieval_text,
               content_sha256, is_searchable
-       FROM author_style_sections
-       WHERE document_id = ? AND revision_sha256 = ?
+       FROM author_style_current_sections
+       WHERE document_id = ?
        ORDER BY ordinal ASC`,
-      [documentId, revisionSha256]
+      [documentId]
     );
     return rows;
   }
@@ -1193,14 +1161,14 @@ async function upsertAuthorStyleSection(
   section: AuthorStyleSection
 ): Promise<void> {
   await connection.execute(
-    `INSERT INTO author_style_sections
-      (document_id, revision_sha256, section_id, context_key, parent_section_id,
+    `INSERT INTO author_style_current_sections
+      (document_id, section_id, context_key, parent_section_id,
        delivery_section_id, section_type, content_layer, context_priority,
        heading_level, title, heading_path_json, aliases_json, ordinal,
        source_line_start, source_line_end, content_chars, estimated_tokens,
        direct_markdown, delivery_markdown, retrieval_text, content_sha256,
        is_searchable)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
       context_key = VALUES(context_key),
       parent_section_id = VALUES(parent_section_id),
@@ -1224,7 +1192,6 @@ async function upsertAuthorStyleSection(
       is_searchable = VALUES(is_searchable)`,
     [
       section.documentId,
-      section.revisionSha256,
       section.sectionId,
       section.contextKey,
       section.parentSectionId,
