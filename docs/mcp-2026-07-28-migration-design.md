@@ -422,6 +422,10 @@ Vitest `4.1.10`、Wrangler `4.107.0`を解決している。新lockは許可し�
 維持していることを`verify:dependencies`で確認済みである。
 
 lockfile更新後は、4 packageのdependency closureで説明できないtransitive driftをNo-Goとする。
+`verify:dependencies`は`pnpm list`の表示treeを使わず、確定commitと新lockのpnpm lock v9
+`importers`、`packages`、`snapshots`を直接比較する。peer suffixとoptional edgeを保持し、
+固定rootと共有するnodeを変更allowlistから除外する。integrityを含むrecord差分、孤立record、
+未知または曖昧なYAML構文はfail closedとする。
 CIで`pnpm install --frozen-lockfile`とpeer dependency検証を行う。
 
 `agents@0.20.1`がnon-optional peerとして要求するv1 SDK `1.30.0`はpeer解決とlegacy client

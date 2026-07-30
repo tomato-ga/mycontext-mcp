@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  compareLockMigration,
+  parsePnpmLockV9
+} from "./pnpm-lock-v9.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workerDirectory = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(workerDirectory, "..");
-const legacyDirectory = path.join(repositoryRoot, "mycontext-mcp-worker");
 const legacyDirectoryName = "mycontext-mcp-worker";
 const baseline = JSON.parse(
   await readFile(path.join(workerDirectory, "verification", "migration-baseline.json"), "utf8")
@@ -60,115 +63,6 @@ function stableValue(value) {
 
 function sameJson(left, right) {
   return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
-}
-
-function dependencyGraph(directory, label) {
-  const result = spawnSync(
-    "pnpm",
-    ["list", "--lockfile-only", "--json", "--depth", "Infinity"],
-    {
-      cwd: directory,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, NO_COLOR: "1" }
-    }
-  );
-  if (result.status !== 0) {
-    const detail = result.stderr.trim() || result.stdout.trim() || `exit ${String(result.status)}`;
-    fail(`${label} lock graph could not be read: ${detail}`);
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(result.stdout);
-    if (!Array.isArray(parsed) || parsed.length !== 1) {
-      fail(`${label} pnpm graph must contain exactly one importer`);
-      return null;
-    }
-    return parsed[0];
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    fail(`${label} pnpm graph is not valid JSON: ${detail}`);
-    return null;
-  }
-}
-
-function nodeIdentity(node, dependencyName) {
-  const packageName = typeof node.from === "string" ? node.from : dependencyName;
-  const version = typeof node.version === "string" ? node.version : "<missing>";
-  const resolved = typeof node.resolved === "string" ? node.resolved : "";
-  let virtualPath = "";
-  if (typeof node.path === "string") {
-    const marker = `${path.sep}node_modules${path.sep}.pnpm${path.sep}`;
-    const markerIndex = node.path.indexOf(marker);
-    if (markerIndex >= 0) {
-      virtualPath = node.path.slice(markerIndex + marker.length).split(path.sep).join("/");
-    }
-  }
-  return `${packageName}@${version}|${resolved}|${virtualPath}`;
-}
-
-function childDependencies(node) {
-  return {
-    ...(node.dependencies ?? {}),
-    ...(node.optionalDependencies ?? {})
-  };
-}
-
-function collectClosure(node, dependencyName) {
-  const nodes = new Set();
-  const edges = new Set();
-  const visited = new Set();
-
-  function visit(currentNode, currentName) {
-    const currentIdentity = nodeIdentity(currentNode, currentName);
-    nodes.add(currentIdentity);
-    if (visited.has(currentIdentity)) {
-      return;
-    }
-    visited.add(currentIdentity);
-    for (const [childName, childNode] of Object.entries(childDependencies(currentNode))) {
-      const childIdentity = nodeIdentity(childNode, childName);
-      edges.add(`${currentIdentity} -> ${childName}:${childIdentity}`);
-      visit(childNode, childName);
-    }
-  }
-
-  visit(node, dependencyName);
-  return { nodes, edges };
-}
-
-function mergeClosures(closures) {
-  const merged = { nodes: new Set(), edges: new Set() };
-  for (const closure of closures) {
-    for (const node of closure.nodes) merged.nodes.add(node);
-    for (const edge of closure.edges) merged.edges.add(edge);
-  }
-  return merged;
-}
-
-function setDifference(left, right) {
-  return [...left].filter((value) => !right.has(value)).sort();
-}
-
-function rootDependencies(graph) {
-  return {
-    ...(graph?.dependencies ?? {}),
-    ...(graph?.devDependencies ?? {})
-  };
-}
-
-function rootClosure(graph, dependencyNames, label) {
-  const roots = rootDependencies(graph);
-  const closures = [];
-  for (const dependencyName of dependencyNames) {
-    const rootNode = roots[dependencyName];
-    if (rootNode === undefined) {
-      fail(`${label} lock graph is missing direct dependency ${dependencyName}`);
-      continue;
-    }
-    closures.push(collectClosure(rootNode, dependencyName));
-  }
-  return mergeClosures(closures);
 }
 
 const legacyPackage = JSON.parse(readBaselineFile("package.json"));
@@ -266,9 +160,23 @@ if (baselineWorkspaceHash !== expectedWorkspaceHash) {
   fail("baseline pnpm-workspace.yaml hash does not match the manifest");
 }
 
-const legacyGraph = dependencyGraph(legacyDirectory, "legacy");
-const targetGraph = dependencyGraph(workerDirectory, "v2");
-if (legacyGraph !== null && targetGraph !== null) {
+const baselineLockContents = readBaselineFile("pnpm-lock.yaml");
+const expectedBaselineLockHash =
+  baseline.legacy.frozenFileSha256["pnpm-lock.yaml"];
+if (sha256(Buffer.from(baselineLockContents)) !== expectedBaselineLockHash) {
+  fail("baseline pnpm-lock.yaml hash does not match the manifest");
+}
+
+let lockStats;
+try {
+  const legacyGraph = parsePnpmLockV9(
+    baselineLockContents,
+    "legacy pnpm-lock.yaml"
+  );
+  const targetGraph = parsePnpmLockV9(
+    await readFile(path.join(workerDirectory, "pnpm-lock.yaml"), "utf8"),
+    "v2 pnpm-lock.yaml"
+  );
   const changedLegacyRoots = ["@modelcontextprotocol/sdk", "agents"];
   const changedTargetRoots = [
     "@modelcontextprotocol/server",
@@ -276,82 +184,49 @@ if (legacyGraph !== null && targetGraph !== null) {
     "@modelcontextprotocol/sdk",
     "agents"
   ];
-  const frozenLegacyRoots = Object.keys(rootDependencies(legacyGraph))
+  const frozenRoots = [...legacyGraph.roots.keys()]
     .filter((name) => !changedLegacyRoots.includes(name))
     .sort();
-  const frozenTargetRoots = Object.keys(rootDependencies(targetGraph))
-    .filter((name) => !changedTargetRoots.includes(name))
-    .sort();
-
-  if (JSON.stringify(frozenLegacyRoots) !== JSON.stringify(frozenTargetRoots)) {
-    fail(
-      `frozen direct dependency set changed: expected ${frozenLegacyRoots.join(", ")}, got ${frozenTargetRoots.join(", ")}`
-    );
-  }
-
-  for (const dependencyName of frozenLegacyRoots) {
-    const legacyClosure = rootClosure(legacyGraph, [dependencyName], "legacy");
-    const targetClosure = rootClosure(targetGraph, [dependencyName], "v2");
-    const removedNodes = setDifference(legacyClosure.nodes, targetClosure.nodes);
-    const addedNodes = setDifference(targetClosure.nodes, legacyClosure.nodes);
-    const removedEdges = setDifference(legacyClosure.edges, targetClosure.edges);
-    const addedEdges = setDifference(targetClosure.edges, legacyClosure.edges);
-    if (
-      removedNodes.length > 0 ||
-      addedNodes.length > 0 ||
-      removedEdges.length > 0 ||
-      addedEdges.length > 0
-    ) {
-      fail(`transitive closure drifted for frozen dependency ${dependencyName}`);
-    }
-  }
-
-  const legacyAll = rootClosure(
+  const comparison = compareLockMigration({
     legacyGraph,
-    Object.keys(rootDependencies(legacyGraph)),
-    "legacy"
-  );
-  const targetAll = rootClosure(
     targetGraph,
-    Object.keys(rootDependencies(targetGraph)),
-    "v2"
+    legacyAllowedRoots: changedLegacyRoots,
+    targetAllowedRoots: changedTargetRoots,
+    frozenRoots,
+    expectedTargetVersions: {
+      ...baseline.target.dependencies,
+      ...baseline.target.devDependencies
+    },
+    expectedTargetRoots: {
+      "@modelcontextprotocol/server": {
+        group: "dependencies",
+        specifier: baseline.target.dependencies["@modelcontextprotocol/server"]
+      },
+      agents: {
+        group: "dependencies",
+        specifier: baseline.target.dependencies.agents
+      },
+      "@modelcontextprotocol/client": {
+        group: "devDependencies",
+        specifier:
+          baseline.target.devDependencies["@modelcontextprotocol/client"]
+      },
+      "@modelcontextprotocol/sdk": {
+        group: "devDependencies",
+        specifier: baseline.target.devDependencies["@modelcontextprotocol/sdk"]
+      }
+    }
+  });
+  for (const error of comparison.errors) {
+    fail(error);
+  }
+  lockStats = comparison.stats;
+} catch (error) {
+  fail(
+    `pnpm lockfile verification could not be completed: ${
+      error instanceof Error ? error.message : String(error)
+    }`
   );
-  const legacyAllowed = rootClosure(legacyGraph, changedLegacyRoots, "legacy");
-  const targetAllowed = rootClosure(targetGraph, changedTargetRoots, "v2");
-
-  for (const removedNode of setDifference(legacyAll.nodes, targetAll.nodes)) {
-    if (!legacyAllowed.nodes.has(removedNode)) {
-      fail(`lockfile removed a package outside the changed dependency closure: ${removedNode}`);
-    }
-  }
-  for (const addedNode of setDifference(targetAll.nodes, legacyAll.nodes)) {
-    if (!targetAllowed.nodes.has(addedNode)) {
-      fail(`lockfile added a package outside the changed dependency closure: ${addedNode}`);
-    }
-  }
-  for (const removedEdge of setDifference(legacyAll.edges, targetAll.edges)) {
-    if (!legacyAllowed.edges.has(removedEdge)) {
-      fail(`lockfile removed an edge outside the changed dependency closure: ${removedEdge}`);
-    }
-  }
-  for (const addedEdge of setDifference(targetAll.edges, legacyAll.edges)) {
-    if (!targetAllowed.edges.has(addedEdge)) {
-      fail(`lockfile added an edge outside the changed dependency closure: ${addedEdge}`);
-    }
-  }
-
-  const targetRoots = rootDependencies(targetGraph);
-  for (const [dependencyName, expectedVersion] of Object.entries({
-    ...baseline.target.dependencies,
-    ...baseline.target.devDependencies
-  })) {
-    const actualVersion = targetRoots[dependencyName]?.version;
-    if (actualVersion !== expectedVersion) {
-      fail(
-        `resolved ${dependencyName} version must be ${expectedVersion}, got ${actualVersion ?? "<missing>"}`
-      );
-    }
-  }
 }
 
 if (errors.length > 0) {
@@ -362,6 +237,8 @@ if (errors.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    "MCP v2 dependency drift verification passed (direct allowlist and frozen dependency closures)."
+    `MCP v2 dependency drift verification passed (direct lockfile v9 comparison; ` +
+      `${String(lockStats.legacySnapshots)} -> ${String(lockStats.targetSnapshots)} snapshots, ` +
+      `${String(lockStats.frozenRoots)} frozen roots).`
   );
 }

@@ -243,6 +243,10 @@ pnpm run verify:release-plan
 pnpm run deploy:dry-run
 ```
 
+`verify:dependencies` reads the pinned legacy and target pnpm lock v9 files
+directly. It is independent of `node_modules` state and rejects protected
+snapshot, optional-edge, integrity, orphan-record, or ambiguous-YAML drift.
+
 The release wrapper requires a completely clean, committed repository,
 pnpm `11.7.0`, project-local Wrangler `4.107.0`, the expected
 `CLOUDFLARE_ACCOUNT_ID`, and exactly one environment-based Cloudflare
