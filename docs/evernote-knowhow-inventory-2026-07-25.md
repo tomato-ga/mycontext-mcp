@@ -605,7 +605,7 @@ Phase 2で優先して読む。
 - `tools/evernote-audit/test_analyze_enex.py`: 基本動作のテスト済み
 - `--expect-count 9926`で、エクスポートの件数不足を検知可能
 - 概要、JSONL、CSV、Markdownの出力に対応
-- Evernote公式Mac版DMGを`/Users/ore/Downloads/Evernote-latest.dmg`へ取得済み
+- Evernote公式Mac版DMGを`~/Downloads/Evernote-latest.dmg`へ取得済み
 - DMGサイズは306,455,593バイト、SHA-256は`1e5103c9fc26997a52bcda929089cdc613eb11e618a209f3fd85d57becb9c41a`
 - `hdiutil verify`でディスクイメージのチェックサムがVALIDであることを確認
 - DMGを開く段階でEvernote EULAへの同意が必要なため、同意・インストールは未実施

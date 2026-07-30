@@ -38,7 +38,7 @@ zsh tools/evernote-audit/run-analyzer.sh \
 ## テスト
 
 ```bash
-/Users/ore/.local/bin/python3 -m unittest tools/evernote-audit/test_analyze_enex.py
+/usr/bin/python3 -m unittest tools/evernote-audit/test_analyze_enex.py
 ```
 
 このMacではHomebrewのPython 3.14とシステムXMLライブラリの組み合わせに不整合があるため、`run-analyzer.sh`がXMLを利用できるPythonを選ぶ。

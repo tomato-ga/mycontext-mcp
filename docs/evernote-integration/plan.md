@@ -2,7 +2,7 @@
 
 作成日: 2026-07-26
 実行者: Codex（実装・検証・Notion反映）と Opus（ドキュメント化）。分担は「実行体制」を参照
-承認者: 大野（各ゲートで判断する）
+承認者: ユーザー本人（各ゲートで判断する）
 
 ## 目的と方針
 
@@ -77,8 +77,8 @@ Notionへ反映する本文は、必ず `docs/evernote-integration/themes/` の�
 |---|---|---|
 | [企画構成プレイブック](https://app.notion.com/3a7625feb1a281d1a981e45f36f296f4) | Editor Knowledge / `kikaku-composition-playbook` | 追記先（取材・インタビュー章など） |
 | [コンテンツ企画案カタログ](https://app.notion.com/3a7625feb1a281639eb8d8dc982f091e) | Editor Knowledge / `kikaku-db-catalog` | 変更しない（事例・根拠の索引として維持） |
-| [大野恭希キャリア・編集スキル](https://app.notion.com/3a5625feb1a281ae80a9f231245e6e36) | Personal Context（着手時にページのCategoryプロパティで要確認） | 原則変更しない。台帳で `既存文書に含まれる` の重複先 |
-| [大野恭希起業と経営](https://app.notion.com/3a5625feb1a281a19112ebe340c95808) | Personal Context（同上） | 同上 |
+| [キャリア・編集スキル](https://app.notion.com/3a5625feb1a281ae80a9f231245e6e36) | Personal Context（着手時にページのCategoryプロパティで要確認） | 原則変更しない。台帳で `既存文書に含まれる` の重複先 |
+| [起業と経営](https://app.notion.com/3a5625feb1a281a19112ebe340c95808) | Personal Context（同上） | 同上 |
 | メディア設計・運営プレイブック | Editor Knowledge / 新規（Phase 3参照） | 新規作成 |
 | 営業・提案・クライアントワークプレイブック | Editor Knowledge / 新規 | 新規作成 |
 | 編集者育成・制作組織プレイブック | Editor Knowledge / 新規 | 新規作成 |
