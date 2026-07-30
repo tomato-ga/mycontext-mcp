@@ -57,7 +57,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: mycontext-sync-worker/pnpm-lock.yaml
+          cache-dependency-path: |
+            mycontext-sync/pnpm-lock.yaml
+            mycontext-sync-worker/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: mycontext-sync
       - run: pnpm install --frozen-lockfile
         working-directory: mycontext-sync-worker
       - run: ./scripts/check-public-safety.sh
