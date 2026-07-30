@@ -192,6 +192,8 @@ Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README
 ## Remote MCP
 
 `mycontext-mcp-worker` は Cloudflare Workers 上で動く読み取り専用 MCP server です。
+MCP stable `2026-07-28`およびTypeScript SDK v2への移行方針は
+[docs/mcp-2026-07-28-migration-design.md](docs/mcp-2026-07-28-migration-design.md)を参照してください。
 
 公開 endpoint:
 
