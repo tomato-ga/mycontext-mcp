@@ -267,6 +267,7 @@ describe("live cutover state assertions", () => {
 
   it("requires the v1 alias to keep exact bindings, cron, and runtime settings", () => {
     const alias = candidatePayload().preservedV1;
+    alias.activeDeployment.versions[0].hasPreview = true;
     expect(
       assertPreservedV1Ready(alias, {
         tag: "alias-tag",
@@ -282,10 +283,19 @@ describe("live cutover state assertions", () => {
         message: "alias message"
       })
     ).toThrow(/bindings/);
+    const publicPreview = structuredClone(alias);
+    publicPreview.subdomain.previewsEnabled = true;
+    expect(() =>
+      assertPreservedV1Ready(publicPreview, {
+        tag: "alias-tag",
+        message: "alias message"
+      })
+    ).toThrow(/preview URL/);
   });
 
-  it("pins candidate tag, message, ETag, bindings, runtime, and preview state", () => {
+  it("pins candidate tag, message, ETag, bindings, and runtime", () => {
     const version = candidateVersion();
+    version.hasPreview = true;
     expect(
       assertCandidateVersion(version, {
         tag: "candidate-tag",

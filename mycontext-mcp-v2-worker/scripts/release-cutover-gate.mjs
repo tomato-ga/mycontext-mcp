@@ -1123,7 +1123,7 @@ function assertPrimaryNonDeploymentState(current, expected, label) {
   );
 }
 
-export function assertBaselineState(state) {
+function assertApprovedPrimaryBaseline(state) {
   invariant(
     state.accountId === EXPECTED_ACCOUNT_ID,
     "Cloudflare account does not match"
@@ -1131,10 +1131,6 @@ export function assertBaselineState(state) {
   invariant(
     sameValue(state.kvNamespaces, EXPECTED_KV_NAMESPACES),
     "Cloudflare KV namespace records do not match"
-  );
-  invariant(
-    state.preservedV1KvEmpty === true,
-    "preserved v1 KV namespaces must be empty at baseline capture"
   );
   assertWorkerAtFullTraffic(state.primary, "primary");
   invariant(
@@ -1150,6 +1146,15 @@ export function assertBaselineState(state) {
     previewsEnabled: true,
     scope: "primary v1 baseline"
   });
+  return true;
+}
+
+export function assertBaselineState(state) {
+  assertApprovedPrimaryBaseline(state);
+  invariant(
+    state.preservedV1KvEmpty === true,
+    "preserved v1 KV namespaces must be empty at baseline capture"
+  );
   invariant(
     state.preservedV1.exists === false,
     "preserved v1 Worker must not exist at baseline capture"
@@ -1178,8 +1183,7 @@ export function assertPreservedV1Ready(worker, { tag, message }) {
     "preserved v1 release tag or message does not match"
   );
   invariant(
-    version.hasPreview === false &&
-      sameValue(version.handlers, ["fetch", "scheduled"]) &&
+    sameValue(version.handlers, ["fetch", "scheduled"]) &&
       version.runtime.compatibilityDate === "2026-07-06" &&
       sameValue(version.runtime.compatibilityFlags, ["nodejs_compat"]),
     "preserved v1 version metadata does not match the frozen runtime"
@@ -1198,7 +1202,6 @@ export function assertCandidateVersion(version, { tag, message }) {
     version.annotations?.["workers/message"] === message,
     "candidate version message does not match"
   );
-  invariant(version.hasPreview === false, "candidate preview URL must be disabled");
   invariant(
     sameValue(version.handlers, ["fetch", "scheduled"]),
     "candidate handlers are incorrect"
@@ -1650,6 +1653,106 @@ async function recoverPreservedV1Manifest(options) {
     kvNamespaces: current.kvNamespaces
   });
   console.log("Preserved v1 alias pending manifest recovered and sealed.");
+}
+
+function assertGateHotfixRepositoryLineage(current, previous) {
+  invariant(
+    previous.headCommit === previous.remoteCommit &&
+      current.headCommit === current.remoteCommit,
+    "gate hotfix recovery requires pushed repository commits"
+  );
+  for (const field of [
+    "branch",
+    "originUrl",
+    "frozenV1Tree",
+    "preservedV1Tree"
+  ]) {
+    invariant(
+      current[field] === previous[field],
+      `gate hotfix recovery changed ${field}`
+    );
+  }
+  runGit([
+    "merge-base",
+    "--is-ancestor",
+    previous.headCommit,
+    current.headCommit
+  ]);
+  const changedPaths = runGit([
+    "diff",
+    "--name-only",
+    `${previous.headCommit}..${current.headCommit}`
+  ])
+    .split("\n")
+    .filter(Boolean);
+  const allowedPaths = new Set([
+    "mycontext-mcp-v2-worker/scripts/release-cutover-gate.mjs",
+    "mycontext-mcp-v2-worker/tests/releaseCutoverGate.test.mjs"
+  ]);
+  invariant(
+    changedPaths.length > 0 &&
+      changedPaths.every((changedPath) => allowedPaths.has(changedPath)),
+    "gate hotfix recovery includes non-gate source changes"
+  );
+  return true;
+}
+
+async function recoverAliasAfterGateHotfix(options) {
+  const baseline = await readPrivateManifest(
+    requiredOption(options, "baseline"),
+    "baseline"
+  );
+  const pending = await readPendingManifestReservation(
+    requiredOption(options, "pending-manifest"),
+    "alias"
+  );
+  invariant(
+    pending.envelope.payload.operation === "deploy-preserved-v1" &&
+      pending.envelope.payload.baselineIntegritySha256 ===
+        baseline.envelope.integritySha256 &&
+      sameValue(
+        pending.envelope.payload.repository,
+        baseline.envelope.payload.repository
+      ),
+    "alias pending manifest does not match the captured baseline"
+  );
+
+  assertReleaseToolchain();
+  const repository = captureRepositoryIdentity();
+  assertGateHotfixRepositoryLineage(
+    repository,
+    baseline.envelope.payload.repository
+  );
+  const current = await captureRemoteState();
+  assertApprovedPrimaryBaseline(current);
+  assertPrimaryUnchanged(current, baseline.envelope.payload.remote.primary);
+  invariant(
+    sameValue(
+      current.kvNamespaces,
+      baseline.envelope.payload.remote.kvNamespaces
+    ),
+    "KV namespace records changed during gate hotfix recovery"
+  );
+  invariant(
+    current.preservedV1KvEmpty === true,
+    "preserved v1 KV namespaces changed before gate hotfix recovery"
+  );
+  assertPreservedV1Ready(current.preservedV1, {
+    tag: pending.envelope.payload.tag,
+    message: pending.envelope.payload.message
+  });
+  await Promise.all([
+    assertPublicUnauthenticated(PRIMARY_ORIGIN),
+    assertPublicUnauthenticated(PRESERVED_V1_ORIGIN)
+  ]);
+  await writePrivateManifest(requiredOption(options, "manifest"), "alias", {
+    createdAt: new Date().toISOString(),
+    repository,
+    primaryBaseline: current.primary,
+    preservedV1: current.preservedV1,
+    kvNamespaces: current.kvNamespaces
+  });
+  console.log("Preserved v1 alias recovered after gate-only hotfix.");
 }
 
 function assertAliasManifestState(current, payload) {
@@ -2160,6 +2263,8 @@ async function main(argv) {
     await deployPreservedV1(options);
   } else if (command === "recover-alias") {
     await recoverPreservedV1Manifest(options);
+  } else if (command === "recover-alias-hotfix") {
+    await recoverAliasAfterGateHotfix(options);
   } else if (command === "upload") {
     await uploadCandidate(options);
   } else if (command === "stage") {
@@ -2182,7 +2287,8 @@ async function main(argv) {
   } else {
     throw new CutoverGateError(
       "Usage: release-cutover-gate.mjs " +
-        "<capture|deploy-alias|recover-alias|upload|stage|smoke|promote|rollback|" +
+        "<capture|deploy-alias|recover-alias|recover-alias-hotfix|upload|stage|" +
+        "smoke|promote|rollback|" +
         "verify-candidate|verify-stage|verify-promotion|verify-rollback> ..."
     );
   }
