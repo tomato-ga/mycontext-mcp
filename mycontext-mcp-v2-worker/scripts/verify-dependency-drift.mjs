@@ -135,10 +135,17 @@ if (
 ) {
   fail("deploy:dry-run must invoke only the local no-upload verifier");
 }
+if (
+  targetPackage.scripts?.["release:gate"] !==
+  "node ./scripts/release-cutover-gate.mjs"
+) {
+  fail("release:gate must invoke only the reviewed live cutover gate");
+}
 for (const scriptName of Object.keys(targetPackage.scripts ?? {})) {
   if (
     !(scriptName in (legacyPackage.scripts ?? {})) &&
     scriptName !== "deploy:dry-run" &&
+    scriptName !== "release:gate" &&
     !/^verify(?::|$)/.test(scriptName) &&
     !/^test:(?:contract|protocol|modern|legacy)(?::|$)/.test(scriptName)
   ) {

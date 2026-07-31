@@ -116,8 +116,12 @@ if (kvIds.some((id) => typeof id !== "string" || !/^[a-f0-9]{32}$/.test(id))) {
 if (new Set(kvIds).size !== kvIds.length) {
   fail("dry-run config reuses one KV namespace for both bindings");
 }
-if (kvIds.some((id) => baseline.legacy.worker.kvNamespaceIds.includes(id))) {
-  fail("dry-run config contains a legacy KV namespace ID");
+const expectedKvIds = baseline.target.kvNamespaces.map((binding) => binding.id);
+if (
+  kvIds.length !== expectedKvIds.length ||
+  expectedKvIds.some((id) => !kvIds.includes(id))
+) {
+  fail("dry-run config does not preserve the canonical OAuth and auth KV namespaces");
 }
 
 const temporaryDirectory = await mkdtemp(
@@ -184,8 +188,9 @@ try {
     for (const input of inputs) {
       const normalized = input.replaceAll("\\", "/");
       if (
-        /(?:^|\/)mycontext-mcp-worker\/src\//.test(normalized) ||
-        normalized.startsWith("../mycontext-mcp-worker/src/")
+        /(?:^|\/)mycontext-mcp-(?:v1-)?worker\/src\//.test(normalized) ||
+        normalized.startsWith("../mycontext-mcp-worker/src/") ||
+        normalized.startsWith("../mycontext-mcp-v1-worker/src/")
       ) {
         fail(`dry-run bundle imports legacy Worker source: ${normalized}`);
       }
@@ -210,13 +215,8 @@ try {
     if (!combinedBundle.includes(baseline.target.origin)) {
       fail("dry-run bundle does not contain the v2 public origin");
     }
-    if (combinedBundle.includes(baseline.legacy.worker.origin)) {
-      fail("dry-run bundle contains the legacy public origin");
-    }
-    for (const legacyKvId of baseline.legacy.worker.kvNamespaceIds) {
-      if (combinedBundle.includes(legacyKvId)) {
-        fail("dry-run bundle contains a legacy KV namespace ID");
-      }
+    if (combinedBundle.includes(baseline.preservedV1.origin)) {
+      fail("dry-run bundle contains the preserved v1 alias origin");
     }
     if (
       /(?:\/Users\/[^/\s"'`]+|\/Volumes\/[^/\s"'`]+)/.test(combinedBundle) ||

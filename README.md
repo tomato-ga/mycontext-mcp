@@ -26,12 +26,12 @@ Kindle Metaskill transcription (fixed 1 file)
   -> mycontext-sync semantic parser + topic routing manifest
   -> TiDB metaskill_documents + revisions + sections
 TiDB context tables
-  -> mycontext-mcp-worker
-  -> MCP tools + context packs + section Resources
-  -> existing MCP clients
+  -> mycontext-mcp-v1-worker
+  -> mycontext-mcp-v1 (MCP v1 fallback; dedicated OAuth/KV)
 TiDB context tables
-  -> mycontext-mcp-v2-worker (local implementation; not deployed yet)
-  -> MCP 2026-07-28 + TypeScript SDK v2 contract tests
+  -> mycontext-mcp-v2-worker
+  -> mycontext-mcp (canonical MCP 2026-07-28 / TypeScript SDK v2)
+  -> existing MCP clients and canonical OAuth/KV
 
 TiDB notion_pages
   -> mycontext-sync export-obsidian
@@ -46,8 +46,9 @@ TiDB notion_pages
 | --- | --- |
 | `mycontext-sync/` | Notionと固定ローカルコーパスを用途別テーブルへ保存する TypeScript CLI。TiDB から Obsidian へ Notion Markdownをexportするコマンドも持つ。 |
 | `mycontext-sync-worker/` | Notionの`Ready`をWebhookとQueueで受け、検証済みrevisionだけをTiDBへ反映する非公開同期Worker。 |
-| `mycontext-mcp-worker/` | TiDB の文書、意味section、選択式context packを公開する Cloudflare Workers Remote MCP server。既存 `/mcp` はOAuth 2.1保護、`/healthz` は公開liveness endpoint。 |
-| `mycontext-mcp-v2-worker/` | 現行Workerを変更せず並行新設するMCP stable `2026-07-28` / TypeScript SDK v2実装。独立KVまで作成済みで、Worker・OAuth Appは未作成、未deploy。 |
+| `mycontext-mcp-worker/` | 本番v1のbyte-exact provenanceとして凍結する基準tree。deploy対象にはしない。 |
+| `mycontext-mcp-v1-worker/` | v1 `0.7.0` を `mycontext-mcp-v1` で常時維持するclone。新しいGitHub OAuth Appと専用KVを使う。 |
+| `mycontext-mcp-v2-worker/` | canonical `mycontext-mcp` をMCP stable `2026-07-28` / TypeScript SDK v2へ切り替える実装。既存origin、OAuth App、KV、secretをversion間で継承する。 |
 | `docs/` | 記事企画や運用メモなど、プロジェクト横断の資料。 |
 
 ## 個人利用と公開repoの分離
@@ -195,11 +196,15 @@ Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README
 
 ## Remote MCP
 
-`mycontext-mcp-worker` は Cloudflare Workers 上で動く読み取り専用 MCP server です。
-現行Workerを維持したまま、別ディレクトリ`mycontext-mcp-v2-worker`へ
-MCP stable `2026-07-28`・TypeScript SDK v2のローカル実装と試験を追加しました。
-別Worker `mycontext-mcp-v2`と専用GitHub OAuth Appはまだ作成・upload・deployしていません。
-分離方針、検証証拠、残りのrollout手順は
+canonical endpoint `mycontext-mcp` は、Cloudflare Workers 上で動く
+MCP stable `2026-07-28`・TypeScript SDK v2の読み取り専用MCP serverです。
+既存origin、GitHub OAuth App、KV、secretを維持したまま、
+`mycontext-mcp-v2-worker/`からversion単位で切り替えます。
+
+v1 `0.7.0` は`mycontext-mcp-v1-worker/`から別Worker
+`mycontext-mcp-v1`へdeployし、専用GitHub OAuth Appと専用KVで常時維持します。
+このaliasでは新規認証が必要です。`mycontext-mcp-worker/`はv1 provenanceの
+凍結treeであり、ここから再deployしません。分離方針、検証証拠、rollout手順は
 [docs/mcp-2026-07-28-migration-design.md](docs/mcp-2026-07-28-migration-design.md)を参照してください。
 
 公開 endpoint:
@@ -281,26 +286,39 @@ mycontext-sync/scripts/run-obsidian-sync.sh
 
 ### Remote MCP Worker
 
-以下は現行`mycontext-mcp`の既存運用手順です。MCP v2の並行新設移行では実行禁止とし、
-現行Workerのsecret更新・再deployには使いません。新設手順は
-[移行設計](docs/mcp-2026-07-28-migration-design.md)と
-[`mycontext-mcp-v2-worker/README.md`](mycontext-mcp-v2-worker/README.md)の
-ローカル検証手順を参照してください。
+3つのsource treeは役割を混ぜません。
+
+- `mycontext-mcp-worker/`: v1 provenanceの凍結tree。deploy禁止。
+- `mycontext-mcp-v1-worker/`: `mycontext-mcp-v1`として維持するv1 alias。
+- `mycontext-mcp-v2-worker/`: canonical `mycontext-mcp`へ反映するv2。
+
+v1 aliasの初回deployでは、repo外のmode-`0600` secrets fileを1つだけ使います。
+canonical v2は既存の5 secret bindingsを継承し、v1 alias用のOAuth secretを
+渡しません。`wrangler secret put`は即時version作成を伴うため、この移行では
+使用しません。具体的なpreflight・0% staging・promotion・rollbackは
+[移行設計](docs/mcp-2026-07-28-migration-design.md)、
+[`mycontext-mcp-v1-worker/README.md`](mycontext-mcp-v1-worker/README.md)、
+[`mycontext-mcp-v2-worker/README.md`](mycontext-mcp-v2-worker/README.md)を参照してください。
+
+各deployable treeのローカル確認:
 
 ```bash
-cd mycontext-mcp-worker
-pnpm install
-wrangler secret put TIDB_DATABASE_URL
-wrangler secret put GITHUB_CLIENT_ID
-wrangler secret put GITHUB_CLIENT_SECRET
-wrangler secret put GITHUB_ALLOWED_USER_ID
-pnpm run deploy
+cd mycontext-mcp-v1-worker
+pnpm run verify:clone
+pnpm run typecheck
+pnpm test
+pnpm run deploy:dry-run
+
+cd ../mycontext-mcp-v2-worker
+pnpm run verify:cutover-config
+pnpm run typecheck
+pnpm test
+pnpm run deploy:dry-run
 ```
 
-ローカル確認:
+ローカル起動後のendpoint確認:
 
 ```bash
-pnpm run dev
 curl -i http://localhost:8787/healthz
 curl -i http://localhost:8787/mcp
 ```

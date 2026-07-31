@@ -91,7 +91,7 @@ const oauthProvider = new OAuthProvider<Env>({
   resourceMetadata: {
     resource: MCP_RESOURCE,
     authorization_servers: [PUBLIC_ORIGIN],
-    scopes_supported: [MCP_SCOPE, OFFLINE_ACCESS_SCOPE],
+    scopes_supported: [MCP_SCOPE],
     bearer_methods_supported: ["header"],
     resource_name: "mycontext-mcp"
   },

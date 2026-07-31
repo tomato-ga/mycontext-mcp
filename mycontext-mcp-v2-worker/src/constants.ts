@@ -1,4 +1,4 @@
-export const PUBLIC_ORIGIN = "https://mycontext-mcp-v2.servicedake.workers.dev";
+export const PUBLIC_ORIGIN = "https://mycontext-mcp.servicedake.workers.dev";
 export const MCP_ROUTE = "/mcp";
 export const MCP_RESOURCE = `${PUBLIC_ORIGIN}${MCP_ROUTE}`;
 export const MCP_SCOPE = "context:read";

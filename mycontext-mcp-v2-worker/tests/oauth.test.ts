@@ -27,7 +27,7 @@ describe("OAuth helpers", () => {
     });
 
     expect(action.startsWith("/authorize?")).toBe(true);
-    expect(action).not.toContain("mycontext-mcp.servicedake.workers.dev");
+    expect(action).not.toContain("mycontext-mcp-v1.servicedake.workers.dev");
     const url = new URL(action, PUBLIC_ORIGIN);
     expect(url.pathname).toBe("/authorize");
     expect(url.searchParams.get("response_type")).toBe("code");

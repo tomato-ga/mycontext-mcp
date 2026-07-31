@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --config ./wrangler.jsonc --name mycontext-mcp-v2",
+    "dev": "wrangler dev --config ./wrangler.jsonc --name mycontext-mcp",
     "deploy:dry-run": "node ./scripts/verify-dry-run.mjs",
     "test": "vitest run",
     "test:live-planning-playbook": "LIVE_PLANNING_PLAYBOOK_SMOKE=1 vitest run tests/livePlanningPlaybook.test.ts",
@@ -13,12 +13,14 @@
     "test:live-author-style": "LIVE_AUTHOR_STYLE_SMOKE=1 vitest run tests/liveAuthorStyle.test.ts",
     "test:live-metaskill": "LIVE_METASKILL_SMOKE=1 vitest run tests/liveMetaskill.test.ts",
     "typecheck": "tsc --noEmit",
-    "verify:isolation": "node ./scripts/verify-isolation.mjs",
+    "verify:isolation": "node ./scripts/verify-cutover-config.mjs",
+    "verify:cutover-config": "node ./scripts/verify-cutover-config.mjs",
     "verify:data-plane": "node ./scripts/verify-data-plane.mjs",
     "verify:oauth-policy": "node ./scripts/verify-oauth-policy.mjs",
     "verify:dependencies": "node ./scripts/verify-dependency-drift.mjs",
-    "verify:release-plan": "node ./scripts/release-version.mjs plan",
-    "tail": "wrangler tail --config ./wrangler.jsonc --name mycontext-mcp-v2"
+    "verify:release-command-shapes": "node ./scripts/release-cutover.mjs plan",
+    "release:gate": "node ./scripts/release-cutover-gate.mjs",
+    "tail": "wrangler tail --config ./wrangler.jsonc --name mycontext-mcp"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.8.1",

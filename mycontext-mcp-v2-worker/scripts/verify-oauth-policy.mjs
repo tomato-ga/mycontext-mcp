@@ -322,6 +322,19 @@ for (const key of legacyKeys) {
       continue;
     }
     for (const metadataKey of legacyMetadataKeys) {
+      if (metadataKey === "scopes_supported") {
+        if (
+          normalizeSource(legacyMetadata.get(metadataKey)) !==
+            "[MCP_SCOPE, OFFLINE_ACCESS_SCOPE]" ||
+          normalizeSource(targetMetadata.get(metadataKey)) !== "[MCP_SCOPE]"
+        ) {
+          fail(
+            "OAuth resourceMetadata.scopes_supported must remove only "
+              + "offline_access for MCP 2026-07-28"
+          );
+        }
+        continue;
+      }
       if (
         normalizeSource(legacyMetadata.get(metadataKey)) !==
         normalizeSource(targetMetadata.get(metadataKey))

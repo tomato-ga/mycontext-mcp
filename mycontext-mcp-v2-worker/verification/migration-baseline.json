@@ -11,6 +11,7 @@
       "wranglerVersion": "4.107.0"
     },
     "worker": {
+      "accountId": "1f7287ca0dc182ac70db5e77dcd5f3ce",
       "name": "mycontext-mcp",
       "origin": "https://mycontext-mcp.servicedake.workers.dev",
       "kvNamespaceIds": [
@@ -55,22 +56,24 @@
     }
   },
   "target": {
+    "accountId": "1f7287ca0dc182ac70db5e77dcd5f3ce",
     "packageName": "mycontext-mcp-v2-worker",
-    "workerName": "mycontext-mcp-v2",
-    "origin": "https://mycontext-mcp-v2.servicedake.workers.dev",
+    "workerName": "mycontext-mcp",
+    "origin": "https://mycontext-mcp.servicedake.workers.dev",
     "mcpApplicationName": "mycontext-mcp",
     "mcpApplicationVersion": "0.8.0",
+    "deploymentMode": "in-place-version-cutover",
     "cron": "17 4 * * *",
     "kvNamespaces": [
       {
         "binding": "OAUTH_KV",
-        "title": "mycontext-mcp-v2-oauth",
-        "id": "a0616be361fb4a65bd12e1fe35ec1101"
+        "title": "OAUTH_KV",
+        "id": "88cc0f72224947fc818c0520207164de"
       },
       {
         "binding": "AUTH_KV",
-        "title": "mycontext-mcp-v2-auth",
-        "id": "3bb6082de7ba4730b759c3e6e8322027"
+        "title": "AUTH_KV",
+        "id": "3c6429869d7e41b19f3423670f2c1c90"
       }
     ],
     "subdomain": {
@@ -96,5 +99,26 @@
       "@modelcontextprotocol/client": "2.0.0",
       "@modelcontextprotocol/sdk": "1.30.0"
     }
+  },
+  "preservedV1": {
+    "accountId": "1f7287ca0dc182ac70db5e77dcd5f3ce",
+    "packageName": "mycontext-mcp-v1-worker",
+    "workerName": "mycontext-mcp-v1",
+    "origin": "https://mycontext-mcp-v1.servicedake.workers.dev",
+    "mcpApplicationName": "mycontext-mcp",
+    "mcpApplicationVersion": "0.7.0",
+    "cron": "17 4 * * *",
+    "kvNamespaces": [
+      {
+        "binding": "OAUTH_KV",
+        "title": "mycontext-mcp-v1-oauth",
+        "id": "a0616be361fb4a65bd12e1fe35ec1101"
+      },
+      {
+        "binding": "AUTH_KV",
+        "title": "mycontext-mcp-v1-auth",
+        "id": "3bb6082de7ba4730b759c3e6e8322027"
+      }
+    ]
   }
 }

@@ -401,6 +401,34 @@ async function assertSuccessfulSurface(
 }
 
 describe("MCP SDK v2 production HTTP entrypoint", () => {
+  it("keeps refresh support at the authorization server but not as a resource scope", async () => {
+    const resourceResponse = await productionFetch(
+      new Request(
+        `${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource${MCP_ROUTE}`,
+        { headers: { host: SERVER_HOST } }
+      )
+    );
+    expect(resourceResponse.status).toBe(200);
+    const resourceMetadata = await resourceResponse.json() as {
+      resource?: string;
+      scopes_supported?: string[];
+    };
+    expect(resourceMetadata.resource).toBe(MCP_RESOURCE);
+    expect(resourceMetadata.scopes_supported).toEqual([MCP_SCOPE]);
+
+    const authorizationResponse = await productionFetch(
+      new Request(`${PUBLIC_ORIGIN}/.well-known/oauth-authorization-server`, {
+        headers: { host: SERVER_HOST }
+      })
+    );
+    expect(authorizationResponse.status).toBe(200);
+    const authorizationMetadata = await authorizationResponse.json() as {
+      scopes_supported?: string[];
+    };
+    expect(authorizationMetadata.scopes_supported).toContain(MCP_SCOPE);
+    expect(authorizationMetadata.scopes_supported).toContain("offline_access");
+  });
+
   it("serves authorized 2026-07-28 traffic through OAuthProvider", async () => {
     const exchanges: Exchange[] = [];
     const client = new ModernClient(

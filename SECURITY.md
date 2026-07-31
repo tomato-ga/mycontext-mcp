@@ -8,6 +8,8 @@ Use local environment files for development and platform secrets for production:
 
 - `mycontext-sync/.env`
 - `mycontext-mcp-worker/.dev.vars`
+- `mycontext-mcp-v1-worker/.dev.vars`
+- `mycontext-mcp-v2-worker/.dev.vars`
 - `mycontext-sync-worker/.dev.vars`
 - Wrangler secrets for deployed Workers
 
@@ -16,6 +18,8 @@ Only example files should be committed:
 - `mycontext-sync/.env.example`
 - `mycontext-sync/mirror.config.example.json`
 - `mycontext-mcp-worker/.dev.vars.example`
+- `mycontext-mcp-v1-worker/.dev.vars.example`
+- `mycontext-mcp-v2-worker/.dev.vars.example`
 - `mycontext-sync-worker/.dev.vars.example`
 
 For personal use, prefer `MIRROR_CONFIG_JSON` inside `mycontext-sync/.env`
