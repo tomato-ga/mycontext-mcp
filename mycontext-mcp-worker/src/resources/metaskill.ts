@@ -1,10 +1,17 @@
-import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import {
+  ProtocolError,
+  ProtocolErrorCode,
+  ResourceNotFoundError,
+  ResourceTemplate,
+  type McpServer
+} from "@modelcontextprotocol/server";
+import {
+  MetaskillRoutingError,
   METASKILL_DOCUMENT_IDS,
   buildMetaskillDocumentUri,
   buildMetaskillSectionUri,
-  toMetaskillDocumentId
+  toMetaskillDocumentId,
+  type MetaskillDocumentId
 } from "../metaskill.js";
 import {
   getMetaskillDocumentResource,
@@ -78,16 +85,20 @@ export function registerMetaskillResources(server: McpServer, client: TidbClient
       mimeType: "text/markdown"
     },
     async (requestedUri, variables) => {
-      const documentId = toMetaskillDocumentId(decodeVariable(variables.documentId, "documentId"));
+      const uri = requestedUri.toString();
+      const documentId = toResourceDocumentId(
+        decodeVariable(variables.documentId, "documentId"),
+        uri
+      );
       const sectionId = decodeVariable(variables.sectionId, "sectionId");
-      if (requestedUri.toString() !== buildMetaskillSectionUri(documentId, sectionId)) {
-        throw resourceNotFound(requestedUri.toString());
+      if (uri !== buildMetaskillSectionUri(documentId, sectionId)) {
+        throw resourceNotFound(uri);
       }
       const section = await getMetaskillSectionResource(client, documentId, sectionId);
-      if (section === null) throw resourceNotFound(requestedUri.toString());
+      if (section === null) throw resourceNotFound(uri);
       return {
         contents: [{
-          uri: requestedUri.toString(),
+          uri,
           mimeType: "text/markdown",
           text: section.markdown,
           _meta: {
@@ -106,17 +117,34 @@ export function registerMetaskillResources(server: McpServer, client: TidbClient
   );
 }
 
+function toResourceDocumentId(value: string, uri: string): MetaskillDocumentId {
+  try {
+    return toMetaskillDocumentId(value);
+  } catch (error) {
+    if (error instanceof MetaskillRoutingError) {
+      throw resourceNotFound(uri);
+    }
+    throw error;
+  }
+}
+
 function decodeVariable(value: string | string[] | undefined, name: string): string {
   if (typeof value !== "string" || value.length === 0) {
-    throw new McpError(ErrorCode.InvalidParams, `Invalid metaskill resource ${name}`);
+    throw new ProtocolError(
+      ProtocolErrorCode.InvalidParams,
+      `Invalid metaskill resource ${name}`
+    );
   }
   try {
     return decodeURIComponent(value);
   } catch {
-    throw new McpError(ErrorCode.InvalidParams, `Invalid metaskill resource ${name}`);
+    throw new ProtocolError(
+      ProtocolErrorCode.InvalidParams,
+      `Invalid metaskill resource ${name}`
+    );
   }
 }
 
-function resourceNotFound(uri: string): McpError {
-  return new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
+function resourceNotFound(uri: string): ResourceNotFoundError {
+  return new ResourceNotFoundError(uri);
 }

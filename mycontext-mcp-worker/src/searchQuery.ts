@@ -160,11 +160,8 @@ export function parsePersonalSynonymConfig(raw: string | undefined): PersonalSyn
       termAliases: parsed.termAliases,
       synonymGroups: parsed.synonymGroups
     };
-  } catch (error) {
-    console.warn(
-      "personal_synonyms_config_invalid",
-      error instanceof Error ? error.message : String(error)
-    );
+  } catch {
+    console.warn("personal_synonyms_config_invalid");
     return EMPTY_PERSONAL_SYNONYM_CONFIG;
   }
 }

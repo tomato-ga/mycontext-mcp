@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { MCP_SCOPE } from "../constants.js";
 import {
@@ -9,11 +9,11 @@ import {
 } from "../skillContext.js";
 import type { TidbClient } from "../tidb.js";
 
-const inputSchema = {
+const inputSchema = z.object({
   skillId: z
     .enum(SKILL_CONTEXT_IDS)
     .describe(SKILL_CONTEXT_SELECTION_GUIDE)
-};
+});
 
 export function registerGetAnalysisSkillContextTool(
   server: McpServer,

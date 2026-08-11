@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AuthorStyleRoutingError,
   buildAuthorStyleSectionUri,
+  resolveAuthorStyleContextKeys,
   validateAuthorStyleSelectors
 } from "../src/authorStyle.js";
 import {
@@ -38,6 +39,45 @@ describe("author style routing", () => {
       mode: "explanatory",
       profile: "neutral"
     })).toThrow("lengthBand is required");
+  });
+
+  it("ignores the persisted profile map for body routing", () => {
+    const bodyManifest = {
+      schemaVersion: "single-context-pack-v2",
+      selectorSchema: {
+        operations: ["generate"],
+        modes: ["explanatory"],
+        lengthBands: ["le600"],
+        profiles: ["neutral", "media-specific"]
+      },
+      modeMap: { explanatory: ["ore-body/composition/explanatory"] },
+      operations: { generate: { base: ["ore-body/contract"] } },
+      lengthBandMap: { le600: [] },
+      profileMap: {
+        neutral: [],
+        "media-specific": ["ore-body/profile/media"]
+      },
+      maxContextChars: 10_000,
+      overflowPolicy: "error_no_truncation" as const
+    };
+    const common = {
+      documentId: "ore-body-style" as const,
+      operation: "generate",
+      mode: "explanatory",
+      lengthBand: "le600"
+    };
+
+    expect(resolveAuthorStyleContextKeys(bodyManifest, {
+      ...common,
+      profile: "media-specific"
+    })).toEqual(resolveAuthorStyleContextKeys(bodyManifest, {
+      ...common,
+      profile: "neutral"
+    }));
+    expect(resolveAuthorStyleContextKeys(bodyManifest, {
+      ...common,
+      profile: "media-specific"
+    })).not.toContain("ore-body/profile/media");
   });
 
   it("returns one ordered, de-duplicated, untruncated context pack", async () => {

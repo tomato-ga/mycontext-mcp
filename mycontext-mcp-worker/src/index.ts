@@ -1,6 +1,12 @@
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createMcpHandler } from "agents/mcp";
+import {
+  hostHeaderValidationResponse,
+  localhostAllowedHostnames,
+  localhostAllowedOrigins,
+  McpServer,
+  originValidationResponse
+} from "@modelcontextprotocol/server";
+import { createMcpHandler } from "agents/mcp/server";
 import {
   MCP_RESOURCE,
   MCP_ROUTE,
@@ -20,7 +26,7 @@ import { createTidbClient } from "./tidb.js";
 import { registerPublicTools } from "./tools/register.js";
 
 function createServer(config: AppConfig): McpServer {
-  const server = new McpServer({ name: "mycontext-mcp", version: "0.7.0" });
+  const server = new McpServer({ name: "mycontext-mcp", version: "0.8.0" });
   const client = createTidbClient(config.tidbDatabaseUrl);
 
   registerPublicTools(server, client, config.personalSynonyms);
@@ -47,10 +53,10 @@ const apiHandler = {
       throw error;
     }
 
-    const server = createServer(config);
-    const response = await createMcpHandler(server, {
+    const response = await createMcpHandler(() => createServer(config), {
       route: MCP_ROUTE,
-      enableJsonResponse: true
+      responseMode: "json",
+      legacy: "stateless"
     })(request, env, ctx);
     const finalResponse = withSecurityHeaders(
       await withOpenAiToolDescriptors(response, inspection.includesToolsList)
@@ -85,7 +91,7 @@ const oauthProvider = new OAuthProvider<Env>({
   resourceMetadata: {
     resource: MCP_RESOURCE,
     authorization_servers: [PUBLIC_ORIGIN],
-    scopes_supported: [MCP_SCOPE, OFFLINE_ACCESS_SCOPE],
+    scopes_supported: [MCP_SCOPE],
     bearer_methods_supported: ["header"],
     resource_name: "mycontext-mcp"
   },
@@ -94,8 +100,31 @@ const oauthProvider = new OAuthProvider<Env>({
   }
 });
 
+const publicHostname = new URL(PUBLIC_ORIGIN).hostname;
+const allowedMcpHostnames = [
+  ...localhostAllowedHostnames(),
+  publicHostname
+];
+const allowedMcpOriginHostnames = [
+  ...localhostAllowedOrigins(),
+  publicHostname
+];
+
+function mcpEndpointValidationResponse(request: Request): Response | undefined {
+  if (new URL(request.url).pathname !== MCP_ROUTE) {
+    return undefined;
+  }
+
+  return hostHeaderValidationResponse(request, allowedMcpHostnames)
+    ?? originValidationResponse(request, allowedMcpOriginHostnames);
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const validationResponse = mcpEndpointValidationResponse(request);
+    if (validationResponse !== undefined) {
+      return withSecurityHeaders(validationResponse);
+    }
     return withSecurityHeaders(await oauthProvider.fetch(request, env, ctx));
   },
 

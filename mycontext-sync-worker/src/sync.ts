@@ -1,5 +1,5 @@
 import {
-  AUTHOR_STYLE_SOURCES,
+  AUTHOR_STYLE_DOCUMENTS,
   parseAuthorStyleMarkdown,
   type LoadedAuthorStyleDocument
 } from "../../mycontext-sync/src/authorStyle.js";
@@ -569,7 +569,7 @@ function defaultParseAuthorStyle(input: {
   managed: ManagedNotionDocument;
   markdown: string;
 }): LoadedAuthorStyleDocument {
-  const source = AUTHOR_STYLE_SOURCES.find(
+  const source = AUTHOR_STYLE_DOCUMENTS.find(
     (candidate) => candidate.documentId === input.managed.documentId
   );
   if (source === undefined) {

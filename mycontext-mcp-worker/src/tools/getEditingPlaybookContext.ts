@@ -1,4 +1,5 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
 import { MCP_SCOPE } from "../constants.js";
 import {
   EditingPlaybookContextError,
@@ -16,7 +17,7 @@ export function registerGetEditingPlaybookContextTool(
       title: "Get full editing playbook context",
       description:
         "Use this first, before search_personal_context, whenever editing, reviewing, red-lining, or deciding whether to publish a completed draft (原稿の編集, 赤入れ, 校正・校閲, 公開前チェック, リライト). Returns the entire 編集プレイブック from its single TiDB record without truncation. For designing a new 企画案 or 構成案 use get_planning_playbook_context instead; after reading this playbook, use search_personal_context only for supporting examples or evidence.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

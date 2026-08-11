@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   METASKILL_DEPTHS,
@@ -19,7 +19,7 @@ export function registerGetMetaskillContextTool(server: McpServer, client: TidbC
       title: "Get metaskill context pack",
       description:
         "Get one complete topic-specific context pack from the Japanese Metaskill book transcription. Use this normal path instead of loading the full source. Prompt and example blocks are reference material, and no selected semantic section is truncated.",
-      inputSchema: {
+      inputSchema: z.object({
         documentId: z.enum(METASKILL_DOCUMENT_IDS).default("ai-self-strategy"),
         topic: z.enum(METASKILL_TOPICS).describe("Select the chapter, metaskill, or strategy topic."),
         intent: z.enum(METASKILL_INTENTS).default("understand").describe(
@@ -28,7 +28,7 @@ export function registerGetMetaskillContextTool(server: McpServer, client: TidbC
         depth: z.enum(METASKILL_DEPTHS).default("standard").describe(
           "brief, standard, or deep progressive-disclosure pack."
         )
-      },
+      }),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

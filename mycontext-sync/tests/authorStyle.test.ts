@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  AUTHOR_STYLE_LOCAL_SOURCES,
   loadAuthorStyleDocument,
   parseAuthorStyleMarkdown,
   type AuthorStyleSource
@@ -36,6 +37,24 @@ const TITLE_KEYS = [
 ];
 
 describe("author style semantic storage", () => {
+  it("keeps ore-body-style Notion-only and rejects the removed analysis outline", () => {
+    expect(AUTHOR_STYLE_LOCAL_SOURCES.map((source) => source.documentId)).toEqual([
+      "ore-title-style"
+    ]);
+    const source: AuthorStyleSource = {
+      documentId: "ore-body-style",
+      authorKey: "ore",
+      styleScope: "body",
+      relativePath: "unused.md"
+    };
+    expect(() => parseAuthorStyleMarkdown({
+      source,
+      markdown: "# Old analysis\n\n## Executive Summary\n\nRemoved.\n",
+      sourcePathKey: "notion:body-page",
+      sourceMtimeMs: 0
+    })).toThrow("ore-body-style H2 outline changed");
+  });
+
   it("parses all 19 title delivery units and ignores headings inside fences", async () => {
     const { root, source } = await writeSource("title.md", titleMarkdown(), "title");
     const document = await loadAuthorStyleDocument(root, source);
@@ -48,63 +67,17 @@ describe("author style semantic storage", () => {
     expect(document.sections.some((section) => section.title === "fenced fake heading")).toBe(false);
   });
 
-  it("stores fine-grained body spans but returns every routed context as complete delivery units", async () => {
-    const { root, source } = await writeSource("body.md", bodyMarkdown(), "body");
-    const document = await loadAuthorStyleDocument(root, source);
-    const manifest = parseAuthorStyleRoutingManifest(document.routingManifest);
-    const sectionMap = new Map(document.sections.flatMap((section) => section.contextKey === null
-      ? []
-      : [[section.contextKey, {
-          contextKey: section.contextKey,
-          title: section.title,
-          markdown: section.deliveryMarkdown
-        }] as const]));
-    const packs = enumerateAuthorStyleSelectors(manifest).map((selectors) =>
-      buildAuthorStyleContext({
-        documentId: document.documentId,
-        displayName: document.displayName,
-        revisionSha256: document.revisionSha256,
-        manifest,
-        selectors,
-        sections: sectionMap
-      })
-    );
-
-    expect(document.deliverySectionCount).toBe(41);
-    expect(document.searchSpanCount).toBe(1);
-    expect(document.sections.find((section) => section.title === "12.1 child")).toMatchObject({
-      sectionType: "search_span",
-      deliverySectionId: "flow"
-    });
-    expect(document.sections.find((section) => section.contextKey === "ore-body/longform/contract"))
-      .toMatchObject({
-        sectionType: "delivery",
-        headingLevel: 3,
-        title: "21.9 longform"
-      });
-    expect(document.sections.find((section) => section.contextKey === "ore-body/ops/references"))
-      .toMatchObject({
-        sectionType: "delivery",
-        headingLevel: 2,
-        title: "22. Chapter 22"
-      });
-    expect(document.parserVersion).toBe("author-style-parser-v2");
-    expect(packs).toHaveLength(320);
-    expect(packs.every((pack) => pack.contextChars <= manifest.maxContextChars)).toBe(true);
-    expect(packs.every((pack) => new Set(pack.contextKeys).size === pack.contextKeys.length)).toBe(true);
-  });
-
-  it("parses the compact v2 body outline without changing the legacy analysis parser", () => {
+  it("parses the current Notion body outline with the persisted routing contract", () => {
     const source: AuthorStyleSource = {
       documentId: "ore-body-style",
       authorKey: "ore",
       styleScope: "body",
-      relativePath: "knowledge/body-v2.md"
+      relativePath: "knowledge/body.md"
     };
     const document = parseAuthorStyleMarkdown({
       source,
-      markdown: compactBodyMarkdown(),
-      sourcePathKey: "notion:v2-page",
+      markdown: currentBodyMarkdown(),
+      sourcePathKey: "notion:body-page",
       sourceMtimeMs: 123
     });
     const manifest = parseAuthorStyleRoutingManifest(document.routingManifest);
@@ -130,6 +103,8 @@ describe("author style semantic storage", () => {
     expect(document.routingVersion).toBe("single-context-pack-v2");
     expect(document.deliverySectionCount).toBe(21);
     expect(document.searchSpanCount).toBe(33);
+    expect(document.sections.some((section) => section.contentLayer === "profile")).toBe(false);
+    expect(document.sections.some((section) => section.contextKey?.includes("/profile/"))).toBe(false);
     expect(document.sections.find(
       (section) => section.contextKey === "ore-body/composition/explanatory"
     )).toMatchObject({ title: "8.1 標準記事", sectionType: "delivery" });
@@ -205,26 +180,7 @@ function titleMarkdown(): string {
   ].join("\n");
 }
 
-function bodyMarkdown(): string {
-  const lines = ["# Body style", "", "## Executive Summary", "", "Summary.", ""];
-  for (let chapter = 1; chapter <= 22; chapter += 1) {
-    lines.push(`## ${chapter}. Chapter ${chapter}`, "", `Chapter ${chapter} rules.`, "");
-    if (chapter === 10 || chapter === 18) {
-      for (let child = 1; child <= 5; child += 1) {
-        lines.push(`### ${chapter}.${child} mode`, "", `Mode ${child}.`, "");
-      }
-    }
-    if (chapter === 12) lines.push("### 12.1 child", "", "Flow evidence.", "");
-    if (chapter === 21) {
-      for (let child = 1; child <= 11; child += 1) {
-        lines.push(`### 21.${child} longform`, "", `Longform ${child}.`, "");
-      }
-    }
-  }
-  return lines.join("\n");
-}
-
-function compactBodyMarkdown(): string {
+function currentBodyMarkdown(): string {
   const chapters: Array<[string, string[]]> = [
     ["1. 基本リズム", []],
     ["2. 文体・語尾", ["2.1 敬体が基調", "2.2 語尾の変化"]],

@@ -1,5 +1,8 @@
 import path from "node:path";
-import { writeEmergencyAuthorStyleSnapshot } from "../emergencyAuthorStyle.js";
+import {
+  stableJsonSha256,
+  writeEmergencyAuthorStyleSnapshot
+} from "../emergencyAuthorStyle.js";
 import { createTidbClientFromEnv } from "../tidb.js";
 import { AppError, toAppError, type CliFlags } from "../types.js";
 
@@ -30,6 +33,17 @@ export async function runExportAuthorStyleMarkdown(flags: CliFlags): Promise<voi
         source_path_key: document.source_path_key,
         revision_sha256: document.context_sha256,
         markdown_sha256: document.source_markdown_sha256,
+        source_bytes: Number(document.source_bytes),
+        source_line_count: Number(document.source_line_count),
+        source_mtime_ms: Number(document.source_mtime_ms),
+        parser_version: document.parser_version,
+        sectioning_version: document.sectioning_version,
+        routing_version: document.routing_version,
+        routing_manifest_sha256: stableJsonSha256(document.routing_manifest_json),
+        outline_sha256: stableJsonSha256(document.outline_json),
+        section_count: Number(document.section_count),
+        delivery_section_count: Number(document.delivery_section_count),
+        search_span_count: Number(document.search_span_count),
         exported_at: new Date().toISOString(),
         emergency_snapshot: true
       }

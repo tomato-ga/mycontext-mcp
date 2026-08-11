@@ -4,26 +4,30 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --config ./wrangler.jsonc --name mycontext-mcp",
+    "deploy": "wrangler deploy --strict --config ./wrangler.jsonc --name mycontext-mcp",
+    "deploy:dry-run": "wrangler deploy --dry-run --strict --config ./wrangler.jsonc --name mycontext-mcp",
     "test": "vitest run",
     "test:live-planning-playbook": "LIVE_PLANNING_PLAYBOOK_SMOKE=1 vitest run tests/livePlanningPlaybook.test.ts",
     "test:live-editing-playbook": "LIVE_EDITING_PLAYBOOK_SMOKE=1 vitest run tests/liveEditingPlaybook.test.ts",
     "test:live-media-playbook": "LIVE_MEDIA_PLAYBOOK_SMOKE=1 vitest run tests/liveMediaPlaybook.test.ts",
     "test:live-author-style": "LIVE_AUTHOR_STYLE_SMOKE=1 vitest run tests/liveAuthorStyle.test.ts",
+    "test:live-author-style-contract": "LIVE_AUTHOR_STYLE_CONTRACT=1 vitest run tests/liveAuthorStyleContract.test.ts",
     "test:live-metaskill": "LIVE_METASKILL_SMOKE=1 vitest run tests/liveMetaskill.test.ts",
     "typecheck": "tsc --noEmit",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail --config ./wrangler.jsonc --name mycontext-mcp"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.8.1",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@tidbcloud/serverless": "^0.3.0",
-    "agents": "^0.17.3",
+    "agents": "0.20.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@types/node": "^22.10.5",
     "typescript": "^5.7.2",
     "vite": "^8.1.3",

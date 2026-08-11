@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   parseBusinessKnowledgeSectionReference,
@@ -24,7 +24,7 @@ import {
 const DEFAULT_MAX_CHARS = 6_000;
 const MAX_CHARS = 12_000;
 
-const inputSchema = {
+const inputSchema = z.object({
   id: z
     .string()
     .min(1)
@@ -39,7 +39,7 @@ const inputSchema = {
     .max(MAX_CHARS)
     .default(DEFAULT_MAX_CHARS)
     .describe("Maximum Markdown characters to return. Use 6000 normally; maximum 12000.")
-};
+});
 
 export type ReadContextTarget =
   | { kind: "document"; id: string }

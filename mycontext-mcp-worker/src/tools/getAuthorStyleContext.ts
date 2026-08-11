@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   AUTHOR_STYLE_DOCUMENT_IDS,
@@ -31,7 +31,7 @@ export function registerGetAuthorStyleContextTool(
       title: "Get author style context pack",
       description:
         "Get one complete, selector-specific context pack for reproducing or evaluating ore's title/body style. Use this normal path instead of loading the full source document. No selected section is truncated.",
-      inputSchema: {
+      inputSchema: z.object({
         documentId: z.enum(AUTHOR_STYLE_DOCUMENT_IDS).describe(
           "ore-title-style for titles; ore-body-style for article bodies"
         ),
@@ -47,7 +47,7 @@ export function registerGetAuthorStyleContextTool(
         profile: z.enum(AUTHOR_STYLE_PROFILES).default("neutral").describe(
           "media-specific is supported only for ore-body-style."
         )
-      },
+      }),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

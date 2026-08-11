@@ -47,8 +47,6 @@ for local_path in \
   "mycontext-sync/.env" \
   "mycontext-sync/mirror.config.json" \
   "mycontext-mcp-worker/.dev.vars" \
-  "mycontext-mcp-v1-worker/.dev.vars" \
-  "mycontext-mcp-v2-worker/.dev.vars" \
   "mycontext-sync-worker/.dev.vars" \
   "MEMORY.md"; do
   if [[ -e "$local_path" ]] && ! git check-ignore -q "$local_path"; then

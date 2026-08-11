@@ -65,7 +65,8 @@ export function parseAuthorStyleRoutingManifest(value: unknown): AuthorStyleRout
 
 export function resolveAuthorStyleContextKeys(
   manifest: AuthorStyleRoutingManifest,
-  selectors: AuthorStyleSelectors
+  selectors: AuthorStyleSelectors,
+  includeProfileRouting = true
 ): string[] {
   assertSelector(manifest.selectorSchema.operations, selectors.operation, "operation");
   assertSelector(manifest.selectorSchema.modes, selectors.mode, "mode");
@@ -98,7 +99,12 @@ export function resolveAuthorStyleContextKeys(
     );
   }
 
-  return [...new Set([...base, ...mode, ...lengthBand, ...profile])];
+  return [...new Set([
+    ...base,
+    ...mode,
+    ...lengthBand,
+    ...(includeProfileRouting ? profile : [])
+  ])];
 }
 
 export function enumerateAuthorStyleSelectors(
@@ -131,7 +137,11 @@ export function buildAuthorStyleContext(input: {
   selectors: AuthorStyleSelectors;
   sections: ReadonlyMap<string, AuthorStyleContextSection>;
 }): BuiltAuthorStyleContext {
-  const contextKeys = resolveAuthorStyleContextKeys(input.manifest, input.selectors);
+  const contextKeys = resolveAuthorStyleContextKeys(
+    input.manifest,
+    input.selectors,
+    input.documentId === "ore-title-style"
+  );
   const selected = contextKeys.map((contextKey) => {
     const section = input.sections.get(contextKey);
     if (section === undefined) {

@@ -1,8 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  AUTHOR_STYLE_SOURCES,
+  AUTHOR_STYLE_DOCUMENTS,
+  AUTHOR_STYLE_LOCAL_SOURCES,
   authorStyleSourceRootFromEnv,
-  loadAuthorStyleDocument
+  loadAuthorStyleDocument,
+  parseAuthorStyleMarkdown
 } from "../authorStyle.js";
 import {
   buildAuthorStyleContext,
@@ -30,19 +32,29 @@ export async function runDoctorAuthorStyle(_flags: CliFlags): Promise<void> {
 
   try {
     await client.ping();
-    for (const source of AUTHOR_STYLE_SOURCES) {
+    for (const source of AUTHOR_STYLE_DOCUMENTS) {
       try {
-        const local = await loadAuthorStyleDocument(sourceRoot, source);
         const storedDocument = await client.getAuthorStyleDocument(source.documentId);
         if (storedDocument === null) {
           results.push({
             documentId: source.documentId,
             status: "missing_tidb_document" satisfies DoctorStatus,
-            expectedSections: local.sectionCount,
             warnings: []
           });
           continue;
         }
+        const localSource = AUTHOR_STYLE_LOCAL_SOURCES.find(
+          (candidate) => candidate.documentId === source.documentId
+        );
+        const local = localSource === undefined
+          ? parseAuthorStyleMarkdown({
+              source,
+              markdown: storedDocument.source_markdown,
+              sourcePathKey: storedDocument.source_path_key,
+              sourceMtimeMs: Number(storedDocument.source_mtime_ms),
+              sourceBytes: Number(storedDocument.source_bytes)
+            })
+          : await loadAuthorStyleDocument(sourceRoot, localSource);
         const rows = await client.listAuthorStyleSections(source.documentId);
 
         const documentMatches = storedDocument.author_key === local.authorKey

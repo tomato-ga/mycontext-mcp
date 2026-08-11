@@ -1,10 +1,17 @@
-import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import {
+  ProtocolError,
+  ProtocolErrorCode,
+  ResourceNotFoundError,
+  ResourceTemplate,
+  type McpServer
+} from "@modelcontextprotocol/server";
+import {
+  AuthorStyleRoutingError,
   AUTHOR_STYLE_DOCUMENT_IDS,
   buildAuthorStyleDocumentUri,
   buildAuthorStyleSectionUri,
-  toAuthorStyleDocumentId
+  toAuthorStyleDocumentId,
+  type AuthorStyleDocumentId
 } from "../authorStyle.js";
 import {
   getAuthorStyleDocumentResource,
@@ -81,16 +88,20 @@ export function registerAuthorStyleResources(server: McpServer, client: TidbClie
       mimeType: "text/markdown"
     },
     async (requestedUri, variables) => {
-      const documentId = toAuthorStyleDocumentId(decodeVariable(variables.documentId, "documentId"));
+      const uri = requestedUri.toString();
+      const documentId = toResourceDocumentId(
+        decodeVariable(variables.documentId, "documentId"),
+        uri
+      );
       const sectionId = decodeVariable(variables.sectionId, "sectionId");
-      if (requestedUri.toString() !== buildAuthorStyleSectionUri(documentId, sectionId)) {
-        throw resourceNotFound(requestedUri.toString());
+      if (uri !== buildAuthorStyleSectionUri(documentId, sectionId)) {
+        throw resourceNotFound(uri);
       }
       const section = await getAuthorStyleSectionResource(client, documentId, sectionId);
-      if (section === null) throw resourceNotFound(requestedUri.toString());
+      if (section === null) throw resourceNotFound(uri);
       return {
         contents: [{
-          uri: requestedUri.toString(),
+          uri,
           mimeType: "text/markdown",
           text: section.markdown,
           _meta: {
@@ -109,17 +120,34 @@ export function registerAuthorStyleResources(server: McpServer, client: TidbClie
   );
 }
 
+function toResourceDocumentId(value: string, uri: string): AuthorStyleDocumentId {
+  try {
+    return toAuthorStyleDocumentId(value);
+  } catch (error) {
+    if (error instanceof AuthorStyleRoutingError) {
+      throw resourceNotFound(uri);
+    }
+    throw error;
+  }
+}
+
 function decodeVariable(value: string | string[] | undefined, name: string): string {
   if (typeof value !== "string" || value.length === 0) {
-    throw new McpError(ErrorCode.InvalidParams, `Invalid author style resource ${name}`);
+    throw new ProtocolError(
+      ProtocolErrorCode.InvalidParams,
+      `Invalid author style resource ${name}`
+    );
   }
   try {
     return decodeURIComponent(value);
   } catch {
-    throw new McpError(ErrorCode.InvalidParams, `Invalid author style resource ${name}`);
+    throw new ProtocolError(
+      ProtocolErrorCode.InvalidParams,
+      `Invalid author style resource ${name}`
+    );
   }
 }
 
-function resourceNotFound(uri: string): McpError {
-  return new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
+function resourceNotFound(uri: string): ResourceNotFoundError {
+  return new ResourceNotFoundError(uri);
 }

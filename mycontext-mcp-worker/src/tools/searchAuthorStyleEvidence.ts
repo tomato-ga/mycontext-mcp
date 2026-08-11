@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { AUTHOR_STYLE_DOCUMENT_IDS } from "../authorStyle.js";
 import { MCP_SCOPE } from "../constants.js";
@@ -19,11 +19,11 @@ export function registerSearchAuthorStyleEvidenceTool(
       title: "Search author style evidence",
       description:
         "Audit path for searching evidence, profile, and maintenance sections in ore's title/body style sources. Returns each complete semantic delivery section, not arbitrary text chunks.",
-      inputSchema: {
+      inputSchema: z.object({
         documentId: z.enum(AUTHOR_STYLE_DOCUMENT_IDS),
         query: z.string().trim().min(1).max(1_000),
         topK: z.number().optional().describe("Integer from 1 to 5; defaults to 3.")
-      },
+      }),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

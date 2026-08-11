@@ -4,11 +4,11 @@ import { sha256 } from "./hash.js";
 import { parseAuthorStyleRoutingManifest } from "./authorStyleRouting.js";
 import { AppError } from "./types.js";
 
-export const AUTHOR_STYLE_PARSER_VERSION = "author-style-parser-v2";
+export const TITLE_PARSER_VERSION = "author-style-parser-v2";
 export const AUTHOR_STYLE_SECTIONING_VERSION = "semantic-delivery-v1";
-export const AUTHOR_STYLE_ROUTING_VERSION = "single-context-pack-v1";
-const COMPACT_BODY_PARSER_VERSION = "author-style-parser-v3";
-const COMPACT_BODY_ROUTING_VERSION = "single-context-pack-v2";
+export const TITLE_ROUTING_VERSION = "single-context-pack-v1";
+export const BODY_PARSER_VERSION = "author-style-parser-v3";
+export const BODY_ROUTING_VERSION = "single-context-pack-v2";
 
 const MEDIUMTEXT_MAX_BYTES = 16_777_215;
 
@@ -17,10 +17,13 @@ export type AuthorStyleDocumentId = typeof AUTHOR_STYLE_DOCUMENT_IDS[number];
 export type AuthorStyleScope = "title" | "body";
 export type AuthorStyleContentLayer = "runtime" | "profile" | "evaluation" | "evidence" | "ops";
 
-export interface AuthorStyleSource {
+export interface AuthorStyleDocumentDefinition {
   documentId: AuthorStyleDocumentId;
   authorKey: "ore";
   styleScope: AuthorStyleScope;
+}
+
+export interface AuthorStyleSource extends AuthorStyleDocumentDefinition {
   relativePath: string;
 }
 
@@ -74,7 +77,7 @@ export interface LoadedAuthorStyleDocument {
 }
 
 export interface AuthorStyleMarkdownInput {
-  source: AuthorStyleSource;
+  source: AuthorStyleDocumentDefinition;
   markdown: string;
   sourcePathKey: string;
   sourceMtimeMs: number;
@@ -98,20 +101,25 @@ interface BodyDefinition {
   priority: number;
 }
 
-type BodyLayout = "legacy-analysis" | "compact-v2";
+export const AUTHOR_STYLE_DOCUMENTS: readonly AuthorStyleDocumentDefinition[] = [
+  {
+    documentId: "ore-title-style",
+    authorKey: "ore",
+    styleScope: "title"
+  },
+  {
+    documentId: "ore-body-style",
+    authorKey: "ore",
+    styleScope: "body"
+  }
+];
 
-export const AUTHOR_STYLE_SOURCES: readonly AuthorStyleSource[] = [
+export const AUTHOR_STYLE_LOCAL_SOURCES: readonly AuthorStyleSource[] = [
   {
     documentId: "ore-title-style",
     authorKey: "ore",
     styleScope: "title",
     relativePath: "knowledge/ore-title-reproduction-guide.md"
-  },
-  {
-    documentId: "ore-body-style",
-    authorKey: "ore",
-    styleScope: "body",
-    relativePath: "knowledge/ore-body-style-analysis-20260713.md"
   }
 ];
 
@@ -127,14 +135,6 @@ const TITLE_MODE_KEYS = {
 } as const;
 
 const BODY_MODE_KEYS = {
-  "short-news": ["ore-body/composition/short-news", "ore-body/mode/classic-short-news"],
-  explanatory: ["ore-body/composition/explanatory", "ore-body/mode/modern-explanatory"],
-  review: ["ore-body/composition/review", "ore-body/mode/review"],
-  interview: ["ore-body/composition/interview", "ore-body/mode/interview"],
-  translation: ["ore-body/composition/translation", "ore-body/mode/translation"]
-} as const;
-
-const COMPACT_BODY_MODE_KEYS = {
   "short-news": ["ore-body/composition/short-news"],
   explanatory: ["ore-body/composition/explanatory"],
   review: ["ore-body/composition/review"],
@@ -230,23 +230,18 @@ export function parseAuthorStyleMarkdown(
   const lines = splitContentLines(normalized);
   const headings = scanMarkdownHeadings(lines);
   const displayName = requireDocumentTitle(headings, source.documentId);
-  const bodyLayout = source.styleScope === "body" ? detectBodyLayout(headings) : null;
   const parsed = source.styleScope === "title"
     ? parseTitleStyle(displayName, lines, headings)
-    : bodyLayout === "compact-v2"
-      ? parseCompactBodyStyle(displayName, lines, headings)
-      : parseBodyStyle(displayName, lines, headings);
-  const parserVersion = bodyLayout === "compact-v2"
-    ? COMPACT_BODY_PARSER_VERSION
-    : AUTHOR_STYLE_PARSER_VERSION;
-  const routingVersion = bodyLayout === "compact-v2"
-    ? COMPACT_BODY_ROUTING_VERSION
-    : AUTHOR_STYLE_ROUTING_VERSION;
+    : parseBodyStyle(displayName, lines, headings);
+  const parserVersion = source.styleScope === "body"
+    ? BODY_PARSER_VERSION
+    : TITLE_PARSER_VERSION;
+  const routingVersion = source.styleScope === "body"
+    ? BODY_ROUTING_VERSION
+    : TITLE_ROUTING_VERSION;
   const routingManifest = source.styleScope === "title"
     ? titleRoutingManifest()
-    : bodyLayout === "compact-v2"
-      ? compactBodyRoutingManifest()
-      : bodyRoutingManifest();
+    : bodyRoutingManifest();
   parseAuthorStyleRoutingManifest(routingManifest);
   assertRoutingReferences(parsed, routingManifest, source.documentId);
 
@@ -388,84 +383,7 @@ function parseTitleStyle(documentTitle: string, lines: string[], headings: Headi
   return sections;
 }
 
-function parseBodyStyle(documentTitle: string, lines: string[], headings: Heading[]): ParsedSection[] {
-  const h2s = headings.filter((heading) => heading.level === 2);
-  const sections: ParsedSection[] = [];
-
-  for (let index = 0; index < h2s.length; index += 1) {
-    const h2 = h2s[index];
-    const nextLine = h2s[index + 1]?.line ?? lines.length + 1;
-    const chapter = bodyChapterNumber(h2.title);
-    const children = headings.filter((heading) => {
-      return heading.level === 3 && heading.line > h2.line && heading.line < nextLine;
-    });
-
-    if (chapter === 10 || chapter === 18 || chapter === 21) {
-      parseBodyChildDeliveries(documentTitle, lines, h2, nextLine, children, chapter, sections);
-      continue;
-    }
-
-    const definition = bodyH2Definition(h2.title, chapter);
-    const sectionId = sectionIdFromContextKey(definition.contextKey);
-    const deliveryMarkdown = sliceLines(lines, h2.line, nextLine - 1);
-    const directEnd = children[0]?.line ? children[0].line - 1 : nextLine - 1;
-    sections.push(buildParsedSection({
-      sectionId,
-      contextKey: definition.contextKey,
-      parentSectionId: null,
-      deliverySectionId: sectionId,
-      sectionType: "delivery",
-      contentLayer: definition.contentLayer,
-      contextPriority: definition.priority,
-      headingLevel: 2,
-      title: h2.title,
-      headingPath: [documentTitle, h2.title],
-      aliases: [h2.title, definition.contextKey],
-      sourceLineStart: h2.line,
-      sourceLineEnd: nextLine - 1,
-      directMarkdown: sliceLines(lines, h2.line, directEnd),
-      deliveryMarkdown,
-      isSearchable: true
-    }));
-
-    const usedChildIds = new Set<string>();
-    for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
-      const child = children[childIndex];
-      const childNextLine = children[childIndex + 1]?.line ?? nextLine;
-      const childMarkdown = sliceLines(lines, child.line, childNextLine - 1);
-      const childId = uniqueChildId(sectionId, child.title, usedChildIds);
-      sections.push(buildParsedSection({
-        sectionId: childId,
-        contextKey: null,
-        parentSectionId: sectionId,
-        deliverySectionId: sectionId,
-        sectionType: "search_span",
-        contentLayer: definition.contentLayer,
-        contextPriority: definition.priority,
-        headingLevel: 3,
-        title: child.title,
-        headingPath: [documentTitle, h2.title, child.title],
-        aliases: [child.title],
-        sourceLineStart: child.line,
-        sourceLineEnd: childNextLine - 1,
-        directMarkdown: childMarkdown,
-        deliveryMarkdown,
-        isSearchable: true
-      }));
-    }
-  }
-
-  return sections;
-}
-
-function detectBodyLayout(headings: Heading[]): BodyLayout {
-  const h2Titles = headings
-    .filter((heading) => heading.level === 2)
-    .map((heading) => heading.title);
-  return h2Titles[0] === "1. 基本リズム" ? "compact-v2" : "legacy-analysis";
-}
-
-function parseCompactBodyStyle(
+function parseBodyStyle(
   documentTitle: string,
   lines: string[],
   headings: Heading[]
@@ -491,8 +409,8 @@ function parseCompactBodyStyle(
   const actualTitles = h2s.map((heading) => heading.title);
   if (JSON.stringify(actualTitles) !== JSON.stringify(expectedTitles)) {
     throw new AppError(
-      "author_style_compact_body_outline_mismatch",
-      `compact ore-body-style H2 outline changed; expected ${expectedTitles.join(", ")}, got ${actualTitles.join(", ")}`,
+      "author_style_body_outline_mismatch",
+      `ore-body-style H2 outline changed; expected ${expectedTitles.join(", ")}, got ${actualTitles.join(", ")}`,
       3
     );
   }
@@ -527,7 +445,7 @@ function parseCompactBodyStyle(
     });
 
     if (chapter === 8) {
-      parseCompactCompositionDeliveries(
+      parseBodyCompositionDeliveries(
         documentTitle,
         lines,
         h2,
@@ -538,7 +456,7 @@ function parseCompactBodyStyle(
       continue;
     }
     if (chapter === 15) {
-      parseCompactLongformDeliveries(
+      parseBodyLongformDeliveries(
         documentTitle,
         lines,
         h2,
@@ -552,8 +470,8 @@ function parseCompactBodyStyle(
     const definition = chapter === null ? undefined : definitions[chapter];
     if (definition === undefined) {
       throw new AppError(
-        "author_style_compact_body_heading_unmapped",
-        `unmapped compact body H2 heading: ${h2.title}`,
+        "author_style_body_heading_unmapped",
+        `unmapped body H2 heading: ${h2.title}`,
         3
       );
     }
@@ -629,7 +547,7 @@ function appendBodyDeliveryWithSearchSpans(input: {
   }
 }
 
-function parseCompactCompositionDeliveries(
+function parseBodyCompositionDeliveries(
   documentTitle: string,
   lines: string[],
   h2: Heading,
@@ -682,7 +600,7 @@ function parseCompactCompositionDeliveries(
   }
 }
 
-function parseCompactLongformDeliveries(
+function parseBodyLongformDeliveries(
   documentTitle: string,
   lines: string[],
   h2: Heading,
@@ -804,157 +722,16 @@ function assertChildOutline(label: string, children: Heading[], expectedTitles: 
   const actualTitles = children.map((child) => child.title);
   if (JSON.stringify(actualTitles) !== JSON.stringify(expectedTitles)) {
     throw new AppError(
-      "author_style_compact_body_child_outline_mismatch",
+      "author_style_body_child_outline_mismatch",
       `${label} H3 outline changed; expected ${expectedTitles.join(", ")}, got ${actualTitles.join(", ")}`,
       3
     );
   }
 }
 
-function parseBodyChildDeliveries(
-  documentTitle: string,
-  lines: string[],
-  h2: Heading,
-  nextLine: number,
-  children: Heading[],
-  chapter: number,
-  sections: ParsedSection[]
-): void {
-  if (children.length === 0) {
-    throw new AppError(
-      "author_style_body_expected_children",
-      `expected H3 delivery sections under ${h2.title}`,
-      3
-    );
-  }
-  for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
-    const child = children[childIndex];
-    const childNextLine = children[childIndex + 1]?.line ?? nextLine;
-    const definition = bodyChildDefinition(chapter, child.title, childIndex);
-    const sectionId = sectionIdFromContextKey(definition.contextKey);
-    const markdown = sliceLines(lines, child.line, childNextLine - 1);
-    sections.push(buildParsedSection({
-      sectionId,
-      contextKey: definition.contextKey,
-      parentSectionId: null,
-      deliverySectionId: sectionId,
-      sectionType: "delivery",
-      contentLayer: definition.contentLayer,
-      contextPriority: definition.priority,
-      headingLevel: 3,
-      title: child.title,
-      headingPath: [documentTitle, h2.title, child.title],
-      aliases: [child.title, definition.contextKey],
-      sourceLineStart: child.line,
-      sourceLineEnd: childNextLine - 1,
-      directMarkdown: markdown,
-      deliveryMarkdown: markdown,
-      isSearchable: true
-    }));
-  }
-}
-
-function bodyH2Definition(title: string, chapter: number | null): BodyDefinition {
-  if (title === "Executive Summary") {
-    return { contextKey: "ore-body/bootstrap", contentLayer: "runtime", priority: 70 };
-  }
-  const definitions: Record<number, BodyDefinition> = {
-    1: { contextKey: "ore-body/evidence/data-quality", contentLayer: "evidence", priority: 30 },
-    2: { contextKey: "ore-body/evidence/basic-dimensions", contentLayer: "evidence", priority: 30 },
-    3: { contextKey: "ore-body/core/rhythm", contentLayer: "runtime", priority: 95 },
-    4: { contextKey: "ore-body/core/tone", contentLayer: "runtime", priority: 95 },
-    5: { contextKey: "ore-body/core/person", contentLayer: "runtime", priority: 90 },
-    6: { contextKey: "ore-body/core/logic", contentLayer: "runtime", priority: 95 },
-    7: { contextKey: "ore-body/core/certainty-emotion", contentLayer: "runtime", priority: 95 },
-    8: { contextKey: "ore-body/core/notation", contentLayer: "runtime", priority: 90 },
-    9: { contextKey: "ore-body/structure/opening", contentLayer: "runtime", priority: 95 },
-    11: { contextKey: "ore-body/structure/closing", contentLayer: "runtime", priority: 95 },
-    12: { contextKey: "ore-body/flow", contentLayer: "runtime", priority: 90 },
-    13: { contextKey: "ore-body/reader-distance", contentLayer: "runtime", priority: 85 },
-    14: { contextKey: "ore-body/evidence/structure-elements", contentLayer: "evidence", priority: 35 },
-    15: { contextKey: "ore-body/profile/media", contentLayer: "profile", priority: 70 },
-    16: { contextKey: "ore-body/profile/era", contentLayer: "profile", priority: 70 },
-    17: { contextKey: "ore-body/contract", contentLayer: "runtime", priority: 100 },
-    19: { contextKey: "ore-body/evaluator", contentLayer: "evaluation", priority: 100 },
-    20: { contextKey: "ore-body/evidence/limitations", contentLayer: "evidence", priority: 20 },
-    22: { contextKey: "ore-body/ops/references", contentLayer: "ops", priority: 20 }
-  };
-  const definition = chapter === null ? undefined : definitions[chapter];
-  if (definition === undefined) {
-    throw new AppError(
-      "author_style_body_heading_unmapped",
-      `unmapped body H2 heading: ${title}`,
-      3
-    );
-  }
-  return definition;
-}
-
-function bodyChildDefinition(chapter: number, title: string, index: number): BodyDefinition {
-  if (chapter === 10) {
-    const definitions = [
-      { contextKey: "ore-body/composition/short-news", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/composition/explanatory", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/composition/review", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/composition/interview", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/composition/translation", contentLayer: "runtime", priority: 90 }
-    ] satisfies BodyDefinition[];
-    return requireIndexedDefinition(definitions, index, title);
-  }
-  if (chapter === 18) {
-    const definitions = [
-      { contextKey: "ore-body/mode/classic-short-news", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/mode/modern-explanatory", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/mode/review", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/mode/interview", contentLayer: "runtime", priority: 90 },
-      { contextKey: "ore-body/mode/translation", contentLayer: "runtime", priority: 90 }
-    ] satisfies BodyDefinition[];
-    return requireIndexedDefinition(definitions, index, title);
-  }
-  const longformNumber = /^21\.(\d+)\s/.exec(title)?.[1];
-  if (longformNumber === undefined) {
-    throw new AppError(
-      "author_style_body_longform_heading_unmapped",
-      `unmapped longform heading: ${title}`,
-      3
-    );
-  }
-  if (longformNumber === "9") {
-    return { contextKey: "ore-body/longform/contract", contentLayer: "runtime", priority: 90 };
-  }
-  if (longformNumber === "10") {
-    return {
-      contextKey: "ore-body/longform/anti-patterns",
-      contentLayer: "evaluation",
-      priority: 90
-    };
-  }
-  return {
-    contextKey: `ore-body/evidence/longform-${longformNumber.padStart(2, "0")}`,
-    contentLayer: "evidence",
-    priority: longformNumber === "11" ? 20 : 35
-  };
-}
-
-function requireIndexedDefinition(
-  definitions: readonly BodyDefinition[],
-  index: number,
-  title: string
-): BodyDefinition {
-  const definition = definitions[index];
-  if (definition === undefined || index >= definitions.length) {
-    throw new AppError(
-      "author_style_body_child_count_mismatch",
-      `unexpected body child heading: ${title}`,
-      3
-    );
-  }
-  return definition;
-}
-
 function titleRoutingManifest(): Record<string, unknown> {
   return {
-    schemaVersion: AUTHOR_STYLE_ROUTING_VERSION,
+    schemaVersion: TITLE_ROUTING_VERSION,
     selectorSchema: {
       operations: ["generate", "evaluate"],
       modes: Object.keys(TITLE_MODE_KEYS),
@@ -988,7 +765,7 @@ function titleRoutingManifest(): Record<string, unknown> {
 
 function bodyRoutingManifest(): Record<string, unknown> {
   return {
-    schemaVersion: AUTHOR_STYLE_ROUTING_VERSION,
+    schemaVersion: BODY_ROUTING_VERSION,
     selectorSchema: {
       operations: ["generate", "edit-voice", "edit-structure", "evaluate"],
       modes: Object.keys(BODY_MODE_KEYS),
@@ -996,72 +773,6 @@ function bodyRoutingManifest(): Record<string, unknown> {
       profiles: ["neutral", "classic", "modern", "media-specific"]
     },
     modeMap: BODY_MODE_KEYS,
-    operations: {
-      generate: {
-        base: [
-          "ore-body/contract",
-          "ore-body/core/rhythm",
-          "ore-body/core/tone",
-          "ore-body/core/logic",
-          "ore-body/core/certainty-emotion",
-          "ore-body/core/notation",
-          "ore-body/structure/opening",
-          "ore-body/structure/closing",
-          "ore-body/evaluator"
-        ]
-      },
-      "edit-voice": {
-        base: [
-          "ore-body/contract",
-          "ore-body/core/rhythm",
-          "ore-body/core/tone",
-          "ore-body/core/person",
-          "ore-body/core/certainty-emotion",
-          "ore-body/core/notation",
-          "ore-body/reader-distance",
-          "ore-body/evaluator"
-        ]
-      },
-      "edit-structure": {
-        base: [
-          "ore-body/contract",
-          "ore-body/structure/opening",
-          "ore-body/flow",
-          "ore-body/structure/closing",
-          "ore-body/evaluator"
-        ]
-      },
-      evaluate: {
-        base: ["ore-body/contract", "ore-body/evaluator"]
-      }
-    },
-    lengthBandMap: {
-      le600: [],
-      "601-1000": ["ore-body/longform/contract"],
-      "1001-2000": ["ore-body/longform/contract"],
-      "2001plus": ["ore-body/longform/contract", "ore-body/longform/anti-patterns"]
-    },
-    profileMap: {
-      neutral: [],
-      classic: ["ore-body/profile/era"],
-      modern: ["ore-body/profile/era"],
-      "media-specific": ["ore-body/profile/media"]
-    },
-    maxContextChars: 45_000,
-    overflowPolicy: "error_no_truncation"
-  };
-}
-
-function compactBodyRoutingManifest(): Record<string, unknown> {
-  return {
-    schemaVersion: COMPACT_BODY_ROUTING_VERSION,
-    selectorSchema: {
-      operations: ["generate", "edit-voice", "edit-structure", "evaluate"],
-      modes: Object.keys(COMPACT_BODY_MODE_KEYS),
-      lengthBands: ["le600", "601-1000", "1001-2000", "2001plus"],
-      profiles: ["neutral", "classic", "modern", "media-specific"]
-    },
-    modeMap: COMPACT_BODY_MODE_KEYS,
     operations: {
       generate: {
         base: [

@@ -1,5 +1,10 @@
-import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  ProtocolError,
+  ProtocolErrorCode,
+  ResourceNotFoundError,
+  ResourceTemplate,
+  type McpServer
+} from "@modelcontextprotocol/server";
 import {
   BUSINESS_KNOWLEDGE_DOCUMENT_IDS,
   buildBusinessKnowledgeDocumentUri,
@@ -134,15 +139,21 @@ export function registerBusinessKnowledgeResources(server: McpServer, client: Ti
 
 function decodeVariable(value: string | string[] | undefined, name: string): string {
   if (typeof value !== "string" || value.length === 0) {
-    throw new McpError(ErrorCode.InvalidParams, `Invalid business knowledge resource ${name}`);
+    throw new ProtocolError(
+      ProtocolErrorCode.InvalidParams,
+      `Invalid business knowledge resource ${name}`
+    );
   }
   try {
     return decodeURIComponent(value);
   } catch {
-    throw new McpError(ErrorCode.InvalidParams, `Invalid business knowledge resource ${name}`);
+    throw new ProtocolError(
+      ProtocolErrorCode.InvalidParams,
+      `Invalid business knowledge resource ${name}`
+    );
   }
 }
 
-function resourceNotFound(uri: string): McpError {
-  return new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
+function resourceNotFound(uri: string): ResourceNotFoundError {
+  return new ResourceNotFoundError(uri);
 }

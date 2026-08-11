@@ -134,7 +134,12 @@ export function resolveAuthorStyleContextKeys(
       "lengthBand"
     );
   }
-  return [...new Set([...base, ...mode, ...lengthBand, ...profile])];
+  return [...new Set([
+    ...base,
+    ...mode,
+    ...lengthBand,
+    ...(selectors.documentId === "ore-title-style" ? profile : [])
+  ])];
 }
 
 export function buildAuthorStyleDocumentUri(documentId: string): string {

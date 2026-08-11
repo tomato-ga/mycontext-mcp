@@ -1,6 +1,5 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/client";
+import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
 import { describe, expect, it, vi } from "vitest";
 import { MAX_EDITING_PLAYBOOK_CONTEXT_CHARS } from "../src/editingPlaybook.js";
 import { registerGetEditingPlaybookContextTool } from "../src/tools/getEditingPlaybookContext.js";

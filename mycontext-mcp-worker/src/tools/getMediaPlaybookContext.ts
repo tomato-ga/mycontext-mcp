@@ -1,4 +1,5 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
 import { MCP_SCOPE } from "../constants.js";
 import {
   MediaPlaybookContextError,
@@ -16,7 +17,7 @@ export function registerGetMediaPlaybookContextTool(
       title: "Get full media operations playbook context",
       description:
         "Use this first for media strategy, positioning, operating model, production workflow, KPI, distribution, or monetization questions. Returns the entire メディア運営プレイブック from its single TiDB record without truncation. Use search_personal_context afterward only for supporting examples or evidence.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

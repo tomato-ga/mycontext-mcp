@@ -1,5 +1,5 @@
 import {
-  AUTHOR_STYLE_SOURCES,
+  AUTHOR_STYLE_DOCUMENTS,
   parseAuthorStyleMarkdown
 } from "../authorStyle.js";
 import { compareAuthorStyleNotionMigration } from "../authorStyleNotionPreflight.js";
@@ -10,7 +10,7 @@ import { AppError, toAppError, type CliFlags } from "../types.js";
 export async function runPreflightAuthorStyleNotion(flags: CliFlags): Promise<void> {
   const documentId = requiredFlag(flags.documentId, "--document-id");
   const pageId = requiredFlag(flags.pageId, "--page-id");
-  const source = AUTHOR_STYLE_SOURCES.find((candidate) => candidate.documentId === documentId);
+  const source = AUTHOR_STYLE_DOCUMENTS.find((candidate) => candidate.documentId === documentId);
   if (source === undefined) {
     throw new AppError(
       "preflight_document_id_invalid",

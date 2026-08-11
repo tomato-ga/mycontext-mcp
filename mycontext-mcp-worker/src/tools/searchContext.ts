@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { MCP_SCOPE } from "../constants.js";
 import { EMPTY_PERSONAL_SYNONYM_CONFIG, type PersonalSynonymConfig } from "../searchQuery.js";
@@ -6,7 +6,7 @@ import { searchContext, TopKValidationError, validateTopK } from "../tidb.js";
 import type { TidbClient } from "../tidb.js";
 import { buildSearchToolResult } from "./searchResult.js";
 
-const inputSchema = {
+const inputSchema = z.object({
   query: z
     .string()
     .trim()
@@ -22,7 +22,7 @@ const inputSchema = {
     .max(5)
     .default(3)
     .describe("Number of compact candidates to return. Use 3 unless the user asks for broader coverage.")
-};
+});
 
 export function registerSearchContextTool(
   server: McpServer,

@@ -1,4 +1,5 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
 import { MCP_SCOPE } from "../constants.js";
 import {
   PlanningPlaybookContextError,
@@ -16,7 +17,7 @@ export function registerGetPlanningPlaybookContextTool(
       title: "Get full planning playbook context",
       description:
         "Use this first, before search_personal_context, whenever creating, reviewing, or revising an article 企画案, 構成案, H2/H3見出し構成, or 本文構成. Returns the entire 企画構成プレイブック without truncation. After reading it, use search_personal_context only for supporting examples or evidence.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

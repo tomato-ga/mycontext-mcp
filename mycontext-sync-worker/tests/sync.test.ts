@@ -494,7 +494,7 @@ describe("Notion-managed context synchronization", () => {
     }));
   });
 
-  it("keeps reproducible evidence when the historical chapter mapping error occurs", async () => {
+  it("keeps reproducible evidence when the current body outline is invalid", async () => {
     currentManaged = managedDocument({
       documentId: "ore-body-style",
       name: "Body style",
@@ -510,7 +510,7 @@ describe("Notion-managed context synchronization", () => {
       parseAuthorStyle: () => {
         throw new SyncFailure(
           "author_style_validation_failed",
-          "expected H3 delivery sections under 22. References"
+          "ore-body-style H2 outline changed"
         );
       }
     });
@@ -521,9 +521,9 @@ describe("Notion-managed context synchronization", () => {
       state: "failed",
       documentId: "ore-body-style",
       validationStatus: "failed",
-      parserVersion: "author-style-parser-v2",
+      parserVersion: "author-style-parser-v3",
       errorCode: "author_style_validation_failed",
-      errorMessage: "expected H3 delivery sections under 22. References",
+      errorMessage: "ore-body-style H2 outline changed",
       retryable: false,
       nextAction: "review_notion_and_set_ready"
     });

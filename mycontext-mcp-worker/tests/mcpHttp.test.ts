@@ -230,7 +230,7 @@ async function issueAccessToken(
     redirectUris: [CLIENT_REDIRECT_URI],
     tokenEndpointAuthMethod: "none"
   });
-  const verifier = `mcp-v2-${"v".repeat(48)}`;
+  const verifier = `mcp-current-${"v".repeat(48)}`;
   const verifierHash = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(verifier)
@@ -248,7 +248,7 @@ async function issueAccessToken(
       resource
     },
     userId: `integration-${crypto.randomUUID()}`,
-    metadata: { source: "mcpV2Http.test.ts" },
+    metadata: { source: "mcpHttp.test.ts" },
     scope: [MCP_SCOPE],
     props: { userId: "integration-user" },
     revokeExistingGrants: false
@@ -318,7 +318,7 @@ function modernEnvelope(version = MODERN_PROTOCOL_VERSION): Record<string, unkno
   return {
     "io.modelcontextprotocol/protocolVersion": version,
     "io.modelcontextprotocol/clientInfo": {
-      name: "mycontext-v2-http-test",
+      name: "mycontext-http-test",
       version: "1.0.0"
     },
     "io.modelcontextprotocol/clientCapabilities": {}
@@ -384,7 +384,7 @@ async function assertSuccessfulSurface(
   const read = await client.readResource({ uri });
 
   expect(tools.tools.map((tool) => tool.name).sort()).toEqual(EXPECTED_TOOL_NAMES);
-  expect(resources.resources).toHaveLength(5);
+  expect(resources.resources).toHaveLength(6);
   expect(templates.resourceTemplates).toHaveLength(5);
   expect(call.isError).not.toBe(true);
   expect(call.content).toEqual([{ type: "text", text: EDITING_MARKDOWN }]);
@@ -400,7 +400,7 @@ async function assertSuccessfulSurface(
   })]);
 }
 
-describe("MCP SDK v2 production HTTP entrypoint", () => {
+describe("MCP stable 2026-07-28 production HTTP entrypoint", () => {
   it("keeps refresh support at the authorization server but not as a resource scope", async () => {
     const resourceResponse = await productionFetch(
       new Request(
@@ -432,7 +432,7 @@ describe("MCP SDK v2 production HTTP entrypoint", () => {
   it("serves authorized 2026-07-28 traffic through OAuthProvider", async () => {
     const exchanges: Exchange[] = [];
     const client = new ModernClient(
-      { name: "mycontext-v2-modern-test", version: "1.0.0" },
+      { name: "mycontext-modern-test", version: "1.0.0" },
       {
         versionNegotiation: {
           mode: { pin: MODERN_PROTOCOL_VERSION }
@@ -492,10 +492,10 @@ describe("MCP SDK v2 production HTTP entrypoint", () => {
     await client.close();
   });
 
-  it("keeps the authorized v1.30 stateless compatibility lane", async () => {
+  it("keeps authorized SDK 1.30 stateless client compatibility", async () => {
     const exchanges: Exchange[] = [];
     const client = new LegacyClient({
-      name: "mycontext-v2-legacy-test",
+      name: "mycontext-legacy-compatibility-test",
       version: "1.0.0"
     });
     const transport = new LegacyHttpTransport(SERVER_URL, {
@@ -622,7 +622,7 @@ describe("MCP SDK v2 production HTTP entrypoint", () => {
 
   it("emits the 2026 resource-not-found shape through OAuthProvider", async () => {
     const client = new ModernClient(
-      { name: "mycontext-v2-resource-test", version: "1.0.0" },
+      { name: "mycontext-resource-test", version: "1.0.0" },
       {
         versionNegotiation: {
           mode: { pin: MODERN_PROTOCOL_VERSION }

@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { EMPTY_PERSONAL_SYNONYM_CONFIG, type PersonalSynonymConfig } from "../searchQuery.js";
 import type { TidbClient } from "../tidb.js";
 import { registerGetAnalysisSkillContextTool } from "./getAnalysisSkillContext.js";

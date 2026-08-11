@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { GITHUB_CALLBACK_URL } from "../src/constants.js";
+import {
+  GITHUB_CALLBACK_URL,
+  MCP_RESOURCE,
+  PUBLIC_ORIGIN
+} from "../src/constants.js";
 import {
   buildAuthorizationFormAction,
   buildGitHubAuthorizeUrl,
@@ -19,18 +23,16 @@ describe("OAuth helpers", () => {
       state: "state-456",
       codeChallenge: "challenge-789",
       codeChallengeMethod: "S256",
-      resource: "https://mycontext-mcp.servicedake.workers.dev/mcp"
+      resource: MCP_RESOURCE
     });
 
     expect(action.startsWith("/authorize?")).toBe(true);
-    const url = new URL(action, "https://mycontext-mcp.servicedake.workers.dev");
+    const url = new URL(action, PUBLIC_ORIGIN);
     expect(url.pathname).toBe("/authorize");
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("client_id")).toBe("client-123");
     expect(url.searchParams.get("scope")).toBe("context:read");
-    expect(url.searchParams.get("resource")).toBe(
-      "https://mycontext-mcp.servicedake.workers.dev/mcp"
-    );
+    expect(url.searchParams.get("resource")).toBe(MCP_RESOURCE);
   });
 
   it("builds a GitHub authorize URL with fixed callback and state", () => {
@@ -68,7 +70,7 @@ describe("OAuth helpers", () => {
       state: "state-456",
       codeChallenge: "challenge-789",
       codeChallengeMethod: "S256" as const,
-      resource: "https://mycontext-mcp.servicedake.workers.dev/mcp"
+      resource: MCP_RESOURCE
     };
     expect(() => validateRequestedScope({
       ...baseRequest,

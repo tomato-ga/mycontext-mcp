@@ -1,5 +1,5 @@
 import {
-  AUTHOR_STYLE_SOURCES,
+  AUTHOR_STYLE_LOCAL_SOURCES,
   authorStyleSourceRootFromEnv
 } from "../authorStyle.js";
 import {
@@ -15,7 +15,7 @@ export async function runPullAuthorStyle(flags: CliFlags): Promise<void> {
   const results: AuthorStyleSyncResult[] = [];
 
   try {
-    for (const source of AUTHOR_STYLE_SOURCES) {
+    for (const source of AUTHOR_STYLE_LOCAL_SOURCES) {
       try {
         const result = await syncAuthorStyleDocument({
           sourceRoot,

@@ -16,7 +16,7 @@ Notion MyContext Documents (Status = Ready)
 noteAI editor knowledge Markdown
   -> mycontext-sync
   -> TiDB editor_knowledge_documents
-Claude skill business knowledge Markdown (fixed 2 files)
+Claude skill business knowledge Markdown (fixed 3 files)
   -> mycontext-sync section-aware parser
   -> TiDB business_knowledge_documents + business_knowledge_sections
 Notion author-style pages (fixed title/body pages)
@@ -26,12 +26,9 @@ Kindle Metaskill transcription (fixed 1 file)
   -> mycontext-sync semantic parser + topic routing manifest
   -> TiDB metaskill_documents + revisions + sections
 TiDB context tables
-  -> mycontext-mcp-v1-worker
-  -> mycontext-mcp-v1 (MCP v1 fallback; dedicated OAuth/KV)
-TiDB context tables
-  -> mycontext-mcp-v2-worker
-  -> mycontext-mcp (canonical MCP 2026-07-28 / TypeScript SDK v2)
-  -> existing MCP clients and canonical OAuth/KV
+  -> mycontext-mcp-worker
+  -> mycontext-mcp (MCP stable 2026-07-28)
+  -> existing MCP clients and OAuth/KV
 
 TiDB notion_pages
   -> mycontext-sync export-obsidian
@@ -46,9 +43,7 @@ TiDB notion_pages
 | --- | --- |
 | `mycontext-sync/` | Notionと固定ローカルコーパスを用途別テーブルへ保存する TypeScript CLI。TiDB から Obsidian へ Notion Markdownをexportするコマンドも持つ。 |
 | `mycontext-sync-worker/` | Notionの`Ready`をWebhookとQueueで受け、検証済みrevisionだけをTiDBへ反映する非公開同期Worker。 |
-| `mycontext-mcp-worker/` | 本番v1のbyte-exact provenanceとして凍結する基準tree。deploy対象にはしない。 |
-| `mycontext-mcp-v1-worker/` | v1 `0.7.0` を `mycontext-mcp-v1` で常時維持するclone。新しいGitHub OAuth Appと専用KVを使う。 |
-| `mycontext-mcp-v2-worker/` | canonical `mycontext-mcp` をMCP stable `2026-07-28` / TypeScript SDK v2へ切り替える実装。既存origin、OAuth App、KV、secretをversion間で継承する。 |
+| `mycontext-mcp-worker/` | canonical `mycontext-mcp` の唯一の実装。MCP stable `2026-07-28`と既存クライアント互換のstateless HTTPレーンを提供する。 |
 | `docs/` | 記事企画や運用メモなど、プロジェクト横断の資料。 |
 
 ## 個人利用と公開repoの分離
@@ -184,8 +179,8 @@ metaskill_sections(
 5. `.env` の `EDITOR_KNOWLEDGE_SOURCE_ROOT` を設定し、`pnpm pull-editor-knowledge` で固定8件を差分同期する。
 6. `pnpm doctor-editor-knowledge` でローカルMarkdownとTiDBのハッシュ一致を検証する。
 7. `.env` の `BUSINESS_KNOWLEDGE_SOURCE_ROOT` を設定し、`pnpm migrate-business-knowledge`で専用2テーブルだけを作成する。
-8. `pnpm pull-business-knowledge`で固定2文書をsection-aware同期し、`pnpm doctor-business-knowledge`で原文・section revision・件数・hashを検証する。
-9. `pnpm migrate-author-style`でAuthor Styleのcurrent-snapshot tableを準備し、固定された2つのNotionページを同期Workerで検証・同期する。ローカル`pull-author-style`は緊急復旧用で、Notion所有中の文書を上書きしない。
+8. `pnpm pull-business-knowledge`で固定3文書をsection-aware同期し、`pnpm doctor-business-knowledge`で原文・section revision・件数・hashを検証する。
+9. `pnpm migrate-author-style`でAuthor Styleのcurrent-snapshot tableを準備し、固定された2つのNotionページを同期Workerで検証・同期する。ローカル`pull-author-style`の対象はtitle文書だけで、bodyの緊急復旧はTiDBからexportした同一構造のsnapshotだけを受け付ける。
 10. `.env` の `METASKILL_SOURCE_ROOT` を設定し、`pnpm migrate-metaskill`、`pnpm pull-metaskill`、`pnpm doctor-metaskill`で固定1文書・意味section・全topic routingを検証する。
 11. `pnpm run search` でNotion Markdownをローカル検証できる。
 12. 必要に応じて `pnpm export-obsidian` で Obsidian vault の `_notion_pages/` に Markdown を書き出す。
@@ -197,15 +192,9 @@ Notionを人間向け正本にする自動同期は`mycontext-sync-worker/README
 ## Remote MCP
 
 canonical endpoint `mycontext-mcp` は、Cloudflare Workers 上で動く
-MCP stable `2026-07-28`・TypeScript SDK v2の読み取り専用MCP serverです。
-既存origin、GitHub OAuth App、KV、secretを維持したまま、
-`mycontext-mcp-v2-worker/`からversion単位で切り替えます。
-
-v1 `0.7.0` は`mycontext-mcp-v1-worker/`から別Worker
-`mycontext-mcp-v1`へdeployし、専用GitHub OAuth Appと専用KVで常時維持します。
-このaliasでは新規認証が必要です。`mycontext-mcp-worker/`はv1 provenanceの
-凍結treeであり、ここから再deployしません。分離方針、検証証拠、rollout手順は
-[docs/mcp-2026-07-28-migration-design.md](docs/mcp-2026-07-28-migration-design.md)を参照してください。
+MCP stable `2026-07-28`の読み取り専用MCP serverです。
+実装とdeploy元は`mycontext-mcp-worker/`だけです。既存origin、GitHub OAuth App、
+KV、secretをそのまま利用します。
 
 公開 endpoint:
 
@@ -286,31 +275,12 @@ mycontext-sync/scripts/run-obsidian-sync.sh
 
 ### Remote MCP Worker
 
-3つのsource treeは役割を混ぜません。
-
-- `mycontext-mcp-worker/`: v1 provenanceの凍結tree。deploy禁止。
-- `mycontext-mcp-v1-worker/`: `mycontext-mcp-v1`として維持するv1 alias。
-- `mycontext-mcp-v2-worker/`: canonical `mycontext-mcp`へ反映するv2。
-
-v1 aliasの初回deployでは、repo外のmode-`0600` secrets fileを1つだけ使います。
-canonical v2は既存の5 secret bindingsを継承し、v1 alias用のOAuth secretを
-渡しません。`wrangler secret put`は即時version作成を伴うため、この移行では
-使用しません。具体的なpreflight・0% staging・promotion・rollbackは
-[移行設計](docs/mcp-2026-07-28-migration-design.md)、
-[`mycontext-mcp-v1-worker/README.md`](mycontext-mcp-v1-worker/README.md)、
-[`mycontext-mcp-v2-worker/README.md`](mycontext-mcp-v2-worker/README.md)を参照してください。
-
-各deployable treeのローカル確認:
+`mycontext-mcp-worker/`がcanonical `mycontext-mcp`の唯一のsource treeです。
+ローカル確認:
 
 ```bash
-cd mycontext-mcp-v1-worker
-pnpm run verify:clone
-pnpm run typecheck
-pnpm test
-pnpm run deploy:dry-run
-
-cd ../mycontext-mcp-v2-worker
-pnpm run verify:cutover-config
+cd mycontext-mcp-worker
+pnpm install --frozen-lockfile --strict-peer-dependencies
 pnpm run typecheck
 pnpm test
 pnpm run deploy:dry-run

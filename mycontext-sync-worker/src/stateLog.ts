@@ -1,7 +1,9 @@
 import {
-  AUTHOR_STYLE_PARSER_VERSION,
-  AUTHOR_STYLE_ROUTING_VERSION,
-  AUTHOR_STYLE_SECTIONING_VERSION
+  AUTHOR_STYLE_SECTIONING_VERSION,
+  BODY_PARSER_VERSION,
+  BODY_ROUTING_VERSION,
+  TITLE_PARSER_VERSION,
+  TITLE_ROUTING_VERSION
 } from "../../mycontext-sync/src/authorStyle.js";
 import {
   BUSINESS_KNOWLEDGE_PARSER_VERSION,
@@ -89,9 +91,14 @@ export class SyncStateTrace {
     this.snapshot.workflowStatus = managed.status;
     this.snapshot.activeRevisionBefore = managed.activeRevision;
     if (managed.category === "Author Style") {
-      this.snapshot.parserVersion = AUTHOR_STYLE_PARSER_VERSION;
+      const isBody = managed.documentId === "ore-body-style";
+      this.snapshot.parserVersion = isBody
+        ? BODY_PARSER_VERSION
+        : TITLE_PARSER_VERSION;
       this.snapshot.sectioningVersion = AUTHOR_STYLE_SECTIONING_VERSION;
-      this.snapshot.routingVersion = AUTHOR_STYLE_ROUTING_VERSION;
+      this.snapshot.routingVersion = isBody
+        ? BODY_ROUTING_VERSION
+        : TITLE_ROUTING_VERSION;
     } else if (managed.category === "Business Knowledge") {
       this.snapshot.parserVersion = SMALL_COMPANY_SELLING_SYSTEM_PARSER_VERSION;
       this.snapshot.sectioningVersion = SMALL_COMPANY_SELLING_SYSTEM_SECTIONING_VERSION;

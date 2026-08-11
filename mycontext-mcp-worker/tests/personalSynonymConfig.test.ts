@@ -42,11 +42,11 @@ describe("parsePersonalSynonymConfig", () => {
   });
 
   it("falls back to empty and warns, rather than throwing, on invalid JSON", () => {
-    expect(parsePersonalSynonymConfig("{not valid json")).toEqual(EMPTY_PERSONAL_SYNONYM_CONFIG);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "personal_synonyms_config_invalid",
-      expect.any(String)
-    );
+    const privateFragment = "private-name-fragment";
+    expect(parsePersonalSynonymConfig(`{"alias":${privateFragment}}`))
+      .toEqual(EMPTY_PERSONAL_SYNONYM_CONFIG);
+    expect(warnSpy).toHaveBeenCalledWith("personal_synonyms_config_invalid");
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(privateFragment);
   });
 
   it("falls back to empty and warns, rather than throwing, when the shape does not match", () => {

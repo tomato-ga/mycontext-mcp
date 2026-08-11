@@ -1,9 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mycontext-mcp",
+  "account_id": "1f7287ca0dc182ac70db5e77dcd5f3ce",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-06",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
   "observability": {
     "logs": {
       "enabled": true,
@@ -27,5 +30,14 @@
   ],
   "triggers": {
     "crons": ["17 4 * * *"]
+  },
+  "secrets": {
+    "required": [
+      "TIDB_DATABASE_URL",
+      "GITHUB_CLIENT_ID",
+      "GITHUB_CLIENT_SECRET",
+      "GITHUB_ALLOWED_USER_ID",
+      "PERSONAL_SYNONYMS"
+    ]
   }
 }
