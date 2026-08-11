@@ -29,10 +29,10 @@ Webhookは`page.properties_updated`と`page.content_updated`だけをQueueへ送
 | --- | --- | --- |
 | `Name` | Title | 人間向け文書名 |
 | `Document ID` | Rich text | 固定・重複禁止 |
-| `Category` | Select | `Personal Context` / `AI Skill` / `Author Style` / `Editor Knowledge` / `Metaskill` |
+| `Category` | Select | `Personal Context` / `AI Skill` / `Author Style` / `Business Knowledge` / `Editor Knowledge` / `Metaskill` |
 | `Status` | Status | `Draft` / `Review` / `Ready` / `Syncing` / `Synced` / `Error` / `Conflict` / `Archived` |
 | `Active` | Checkbox | 同期対象ならon |
-| `Schema Version` | Select | `personal-context-v1` / `ai-skill-v1` / `author-style-v1` / `editor-knowledge-v1` / `metaskill-v1` |
+| `Schema Version` | Select | `personal-context-v1` / `ai-skill-v1` / `author-style-v1` / `business-knowledge-v1` / `editor-knowledge-v1` / `metaskill-v1` |
 | `Sync Source` | Select | 通常は`Notion`。TiDB管理のMetaskillスナップショットだけ`TiDB` |
 | `TiDB Tables` | Multi-select | Worker管理。実際のTiDB保存先table |
 | `Last Synced` | Date | Worker管理 |
@@ -54,16 +54,18 @@ Webhookは`page.properties_updated`と`page.content_updated`だけをQueueへ送
 | `personal-context-v1` | `notion_pages` |
 | `ai-skill-v1` | `notion_pages` |
 | `author-style-v1` | `author_style_documents`, `author_style_current_sections` |
+| `business-knowledge-v1` | `business_knowledge_documents`, `business_knowledge_sections` |
 | `editor-knowledge-v1` | 原則: `editor_knowledge_documents`, `editor_knowledge_sections` |
 | `metaskill-v1` | `metaskill_documents`, `metaskill_revisions`, `metaskill_sections` |
 
 - `Personal Context`: 既存`notion_pages`へ全文Markdownを保存する。`Original Page ID`の行があれば主キーを新しいNotionページIDへ移すため、複製レコードは作らない。
 - `AI Skill`: 再利用可能なAI実行手順を、スキルごとに既存`notion_pages`へ全文Markdownとして保存する。
 - `Author Style`: 固定された2つのNotionページだけを既存のsection/routing parserで検証し、現在スナップショットを2つのauthor-style tableへ保存する。`ore-title-style`は`3a5625fe-b1a2-818a-96fe-fe6241c33f14`、`ore-body-style`は`1b2625fe-b1a2-82d0-9a16-011305919485`以外から同期できない。
+- `Business Knowledge`: 書籍・マーケティング知識の原文を文書行へ保存し、目次アンカーで意味単位のsectionへ分割する。現在Notion同期を許可するDocument IDは`small-company-selling-system`だけ。
 - `Editor Knowledge`: 企画・編集ノウハウを検証して保存する。`henshu-editing-playbook`と`knowhow-media-design`は全文1レコード方式のため`editor_knowledge_documents`だけを使い、旧section行も同期時に削除する。それ以外は2つのeditor-knowledge tableへsection化して保存する。
 - `Metaskill`: 専用`metaskill_*` tableのactive revisionを示す管理用スナップショット。TiDBを正本とし、Notionから`Ready`にして再同期することはできない。
 
-MyContext Documentsに複製した6文書はすべてNotionを正本とします。ローカルMarkdownはWorkerの入力にも、初回移行の判定にも使いません。
+MyContext Documentsへ登録したNotion管理文書は、すべてNotionを正本とします。ローカルMarkdownはWorkerの同期入力には使いません。
 
 Author Styleの同期元は上記2ページに固定されています。ページ移行時はWorker設定のpage IDも明示的に変更する必要があります。
 
@@ -96,6 +98,8 @@ TiDB writerは次のread model tableだけに`SELECT`、`INSERT`、`UPDATE`を�
 notion_pages
 author_style_documents
 author_style_current_sections
+business_knowledge_documents
+business_knowledge_sections
 ```
 
 `context_sync_state_log`には`INSERT`だけを許可します。このtableは追記専用で、Workerは過去の状態ログを`UPDATE`または`DELETE`しません。

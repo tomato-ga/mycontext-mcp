@@ -12,6 +12,10 @@ export const TIDB_TABLES_BY_CATEGORY = {
     "author_style_documents",
     "author_style_current_sections"
   ],
+  "Business Knowledge": [
+    "business_knowledge_documents",
+    "business_knowledge_sections"
+  ],
   "Editor Knowledge": [
     "editor_knowledge_documents",
     "editor_knowledge_sections"
@@ -27,6 +31,7 @@ export const TIDB_TABLES_BY_SCHEMA_VERSION = {
   "personal-context-v1": TIDB_TABLES_BY_CATEGORY["Personal Context"],
   "ai-skill-v1": TIDB_TABLES_BY_CATEGORY["AI Skill"],
   "author-style-v1": TIDB_TABLES_BY_CATEGORY["Author Style"],
+  "business-knowledge-v1": TIDB_TABLES_BY_CATEGORY["Business Knowledge"],
   "editor-knowledge-v1": TIDB_TABLES_BY_CATEGORY["Editor Knowledge"],
   "metaskill-v1": TIDB_TABLES_BY_CATEGORY.Metaskill
 } as const satisfies Record<string, readonly TidbTableName[]>;

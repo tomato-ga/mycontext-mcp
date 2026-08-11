@@ -1,6 +1,7 @@
 export const BUSINESS_KNOWLEDGE_DOCUMENT_IDS = [
   "startup-science",
-  "marketing-wisdom"
+  "marketing-wisdom",
+  "small-company-selling-system"
 ] as const;
 
 export type BusinessKnowledgeDocumentId = typeof BUSINESS_KNOWLEDGE_DOCUMENT_IDS[number];

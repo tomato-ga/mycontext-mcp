@@ -11,7 +11,8 @@ const MEDIUMTEXT_MAX_BYTES = 16_777_215;
 
 export const BUSINESS_KNOWLEDGE_DOCUMENT_IDS = [
   "startup-science",
-  "marketing-wisdom"
+  "marketing-wisdom",
+  "small-company-selling-system"
 ] as const;
 
 export type BusinessKnowledgeDocumentId = typeof BUSINESS_KNOWLEDGE_DOCUMENT_IDS[number];
@@ -20,8 +21,8 @@ export type BusinessKnowledgeContentLayer = "summary" | "detail" | "index";
 export interface BusinessKnowledgeSource {
   documentId: BusinessKnowledgeDocumentId;
   relativePath: string;
-  sourceKind: "book_summary" | "web_export_index";
-  ingestScope: "full_summary" | "index_only";
+  sourceKind: "book_summary" | "web_export_index" | "book_transcription";
+  ingestScope: "full_summary" | "index_only" | "full_text";
   sourceDeclaredAt: string | null;
 }
 

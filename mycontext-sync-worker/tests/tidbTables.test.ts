@@ -13,6 +13,10 @@ describe("TiDB table routing metadata", () => {
         "author_style_documents",
         "author_style_current_sections"
       ],
+      "Business Knowledge": [
+        "business_knowledge_documents",
+        "business_knowledge_sections"
+      ],
       "Editor Knowledge": [
         "editor_knowledge_documents",
         "editor_knowledge_sections"
@@ -23,6 +27,17 @@ describe("TiDB table routing metadata", () => {
         "metaskill_sections"
       ]
     });
+  });
+
+  it("routes business-knowledge-v1 to the existing semantic business tables", () => {
+    expect(tidbTablesForDocument({
+      documentId: "small-company-selling-system",
+      category: "Business Knowledge",
+      schemaVersion: "business-knowledge-v1"
+    })).toEqual([
+      "business_knowledge_documents",
+      "business_knowledge_sections"
+    ]);
   });
 
   it("uses Schema Version as the source of truth for the table list", () => {

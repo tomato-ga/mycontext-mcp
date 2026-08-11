@@ -8,6 +8,10 @@ import {
   BUSINESS_KNOWLEDGE_SECTIONING_VERSION
 } from "../../mycontext-sync/src/businessKnowledge.js";
 import { sha256 } from "./hash.js";
+import {
+  SMALL_COMPANY_SELLING_SYSTEM_PARSER_VERSION,
+  SMALL_COMPANY_SELLING_SYSTEM_SECTIONING_VERSION
+} from "./smallCompanySellingSystem.js";
 import type {
   ManagedNotionDocument,
   SyncFailure,
@@ -88,6 +92,9 @@ export class SyncStateTrace {
       this.snapshot.parserVersion = AUTHOR_STYLE_PARSER_VERSION;
       this.snapshot.sectioningVersion = AUTHOR_STYLE_SECTIONING_VERSION;
       this.snapshot.routingVersion = AUTHOR_STYLE_ROUTING_VERSION;
+    } else if (managed.category === "Business Knowledge") {
+      this.snapshot.parserVersion = SMALL_COMPANY_SELLING_SYSTEM_PARSER_VERSION;
+      this.snapshot.sectioningVersion = SMALL_COMPANY_SELLING_SYSTEM_SECTIONING_VERSION;
     } else if (managed.category === "Editor Knowledge") {
       // Editor Knowledge (kikaku-*) sections reuse the Business Knowledge parser/sectioning
       // machinery unchanged; there is no routing-manifest concept for it, so routingVersion

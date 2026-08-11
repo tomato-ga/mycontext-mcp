@@ -98,6 +98,7 @@ The two source documents are available at:
 ```text
 mycontext://business-knowledge/startup-science
 mycontext://business-knowledge/marketing-wisdom
+mycontext://business-knowledge/small-company-selling-system
 ```
 
 Active semantic sections use this template:

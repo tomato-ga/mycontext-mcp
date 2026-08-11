@@ -19,7 +19,8 @@ export const BUSINESS_KNOWLEDGE_SECTION_URI_TEMPLATE =
 
 const BUSINESS_KNOWLEDGE_DOCUMENT_TITLES: Record<BusinessKnowledgeDocumentId, string> = {
   "startup-science": "起業の科学",
-  "marketing-wisdom": "Wisdom Evolution Marketing"
+  "marketing-wisdom": "Wisdom Evolution Marketing",
+  "small-company-selling-system": "小さな会社の売れる仕組み"
 };
 
 export function registerBusinessKnowledgeResources(server: McpServer, client: TidbClient): void {

@@ -1,4 +1,5 @@
 import type { LoadedAuthorStyleDocument } from "../../mycontext-sync/src/authorStyle.js";
+import type { LoadedBusinessKnowledgeDocument } from "../../mycontext-sync/src/businessKnowledge.js";
 import type { LoadedEditorKnowledgeSectionedDocument } from "../../mycontext-sync/src/editorKnowledge.js";
 
 export type WorkflowStatus =
@@ -15,6 +16,7 @@ export type SyncCategory =
   | "Personal Context"
   | "AI Skill"
   | "Author Style"
+  | "Business Knowledge"
   | "Editor Knowledge"
   | "Metaskill";
 
@@ -22,6 +24,8 @@ export type TidbTableName =
   | "notion_pages"
   | "author_style_documents"
   | "author_style_current_sections"
+  | "business_knowledge_documents"
+  | "business_knowledge_sections"
   | "editor_knowledge_documents"
   | "editor_knowledge_sections"
   | "metaskill_documents"
@@ -76,6 +80,11 @@ export interface EditorKnowledgeSectionedState {
   activeSectionRevisionSha256: string | null;
 }
 
+export interface BusinessKnowledgeState {
+  activeSectionRevisionSha256: string;
+  sourcePathKey: string;
+}
+
 export interface SyncRepository {
   appendSyncStateLog(entry: SyncStateLogEntry): Promise<void>;
   syncNotionPage(input: {
@@ -94,6 +103,10 @@ export interface SyncRepository {
   getEditorKnowledgeSectionedState(documentId: string): Promise<EditorKnowledgeSectionedState | null>;
   activateEditorKnowledgeSectioned(input: {
     document: LoadedEditorKnowledgeSectionedDocument;
+  }): Promise<void>;
+  getBusinessKnowledgeState(documentId: string): Promise<BusinessKnowledgeState | null>;
+  activateBusinessKnowledge(input: {
+    document: LoadedBusinessKnowledgeDocument;
   }): Promise<void>;
 }
 

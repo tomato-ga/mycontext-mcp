@@ -5,7 +5,8 @@ import {
 } from "../../mycontext-sync/src/authorStyle.js";
 import {
   BUSINESS_KNOWLEDGE_PARSER_VERSION,
-  BUSINESS_KNOWLEDGE_SECTIONING_VERSION
+  BUSINESS_KNOWLEDGE_SECTIONING_VERSION,
+  type LoadedBusinessKnowledgeDocument
 } from "../../mycontext-sync/src/businessKnowledge.js";
 import {
   isEditorKnowledgeSectionedDocumentId,
@@ -14,6 +15,10 @@ import {
 } from "../../mycontext-sync/src/editorKnowledge.js";
 import { sha256 } from "./hash.js";
 import type { AuthorStylePageIds } from "./config.js";
+import {
+  SMALL_COMPANY_SELLING_SYSTEM_DOCUMENT_ID,
+  parseSmallCompanySellingSystemMarkdown
+} from "./smallCompanySellingSystem.js";
 import { SyncStateTrace } from "./stateLog.js";
 import { tidbTablesForDocument } from "./tidbTables.js";
 import {
@@ -37,6 +42,10 @@ export interface SyncDependencies {
     managed: ManagedNotionDocument;
     markdown: string;
   }) => LoadedEditorKnowledgeSectionedDocument;
+  parseBusinessKnowledge?: (input: {
+    managed: ManagedNotionDocument;
+    markdown: string;
+  }) => LoadedBusinessKnowledgeDocument;
   now?: () => Date;
   deliveryAttempt?: number;
   authorStylePageIds?: AuthorStylePageIds;
@@ -46,12 +55,14 @@ const EXPECTED_SCHEMA_VERSION = {
   "Personal Context": "personal-context-v1",
   "AI Skill": "ai-skill-v1",
   "Author Style": "author-style-v1",
+  "Business Knowledge": "business-knowledge-v1",
   "Editor Knowledge": "editor-knowledge-v1",
   "Metaskill": "metaskill-v1"
 } as const;
 
 type PreparedContent =
   | { kind: "author-style"; document: LoadedAuthorStyleDocument }
+  | { kind: "business-knowledge"; document: LoadedBusinessKnowledgeDocument }
   | { kind: "editor-knowledge"; document: LoadedEditorKnowledgeSectionedDocument }
   | null;
 
@@ -194,7 +205,15 @@ async function handleReadyPage(
             markdown: second.markdown
           })
         }
-      : refreshed.category === "Editor Knowledge"
+      : refreshed.category === "Business Knowledge"
+        ? {
+            kind: "business-knowledge",
+            document: (dependencies.parseBusinessKnowledge ?? defaultParseBusinessKnowledge)({
+              managed: refreshed,
+              markdown: second.markdown
+            })
+          }
+        : refreshed.category === "Editor Knowledge"
         ? {
             kind: "editor-knowledge",
             document: (dependencies.parseEditorKnowledge ?? defaultParseEditorKnowledge)({
@@ -214,10 +233,14 @@ async function handleReadyPage(
           : prepared.document.sectionRevisionSha256,
         parserVersion: prepared.kind === "author-style"
           ? prepared.document.parserVersion
-          : BUSINESS_KNOWLEDGE_PARSER_VERSION,
+          : prepared.kind === "business-knowledge"
+            ? prepared.document.parserVersion
+            : BUSINESS_KNOWLEDGE_PARSER_VERSION,
         sectioningVersion: prepared.kind === "author-style"
           ? prepared.document.sectioningVersion
-          : BUSINESS_KNOWLEDGE_SECTIONING_VERSION,
+          : prepared.kind === "business-knowledge"
+            ? prepared.document.sectioningVersion
+            : BUSINESS_KNOWLEDGE_SECTIONING_VERSION,
         routingVersion: prepared.kind === "author-style" ? prepared.document.routingVersion : undefined
       });
       await trace.record("content_validated", {
@@ -244,7 +267,13 @@ async function handleReadyPage(
 
     const outcome = refreshed.category === "Author Style"
       ? await syncAuthorStyle(refreshed, requirePreparedAuthorStyle(prepared), dependencies.repository)
-      : refreshed.category === "Editor Knowledge"
+      : refreshed.category === "Business Knowledge"
+        ? await syncBusinessKnowledge(
+            refreshed,
+            requirePreparedBusinessKnowledge(prepared),
+            dependencies.repository
+          )
+        : refreshed.category === "Editor Knowledge"
         ? await syncEditorKnowledgeSectioned(
             refreshed,
             requirePreparedEditorKnowledge(prepared),
@@ -442,6 +471,46 @@ async function syncEditorKnowledgeSectioned(
   };
 }
 
+async function syncBusinessKnowledge(
+  managed: ManagedNotionDocument,
+  document: LoadedBusinessKnowledgeDocument,
+  repository: SyncRepository
+): Promise<SyncOutcome> {
+  const state = await repository.getBusinessKnowledgeState(managed.documentId);
+  const expectedSourceKey = `notion:${managed.pageId}`;
+  if (state !== null && state.sourcePathKey.startsWith("notion:")
+    && state.sourcePathKey !== expectedSourceKey) {
+    const declaredPreviousSourceKey = managed.originalPageId === null
+      ? null
+      : `notion:${managed.originalPageId}`;
+    if (state.sourcePathKey !== declaredPreviousSourceKey) {
+      throw new SyncFailure(
+        "business_knowledge_owned_by_another_notion_page",
+        `${managed.documentId} is already owned by another Notion page`,
+        { workflowStatus: "Conflict" }
+      );
+    }
+  }
+  if (
+    state?.activeSectionRevisionSha256 === document.sectionRevisionSha256
+    && state.sourcePathKey === expectedSourceKey
+  ) {
+    return {
+      pageId: managed.pageId,
+      documentId: managed.documentId,
+      status: "skipped",
+      revisionSha256: document.sectionRevisionSha256
+    };
+  }
+  await repository.activateBusinessKnowledge({ document });
+  return {
+    pageId: managed.pageId,
+    documentId: managed.documentId,
+    status: "synced",
+    revisionSha256: document.sectionRevisionSha256
+  };
+}
+
 function validateManagedDocument(managed: ManagedNotionDocument): void {
   if (!managed.active) {
     throw new SyncFailure("notion_document_inactive", "Active must be enabled before syncing");
@@ -550,6 +619,31 @@ function defaultParseEditorKnowledge(input: {
   }
 }
 
+function defaultParseBusinessKnowledge(input: {
+  managed: ManagedNotionDocument;
+  markdown: string;
+}): LoadedBusinessKnowledgeDocument {
+  if (input.managed.documentId !== SMALL_COMPANY_SELLING_SYSTEM_DOCUMENT_ID) {
+    throw new SyncFailure(
+      "business_knowledge_document_id_invalid",
+      `Business Knowledge Document ID must be ${SMALL_COMPANY_SELLING_SYSTEM_DOCUMENT_ID}`
+    );
+  }
+  try {
+    return parseSmallCompanySellingSystemMarkdown({
+      title: input.managed.name,
+      markdown: input.markdown,
+      sourcePathKey: `notion:${input.managed.pageId}`,
+      sourceMtimeMs: Date.parse(input.managed.lastEditedTime)
+    });
+  } catch (error) {
+    throw new SyncFailure(
+      "business_knowledge_validation_failed",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
 export function syncFingerprint(
   managed: ManagedNotionDocument,
   markdown: string
@@ -609,6 +703,15 @@ function requirePreparedEditorKnowledge(
 ): LoadedEditorKnowledgeSectionedDocument {
   if (value === null || value.kind !== "editor-knowledge") {
     throw new SyncFailure("editor_knowledge_not_prepared", "Editor Knowledge was not parsed");
+  }
+  return value.document;
+}
+
+function requirePreparedBusinessKnowledge(
+  value: PreparedContent
+): LoadedBusinessKnowledgeDocument {
+  if (value === null || value.kind !== "business-knowledge") {
+    throw new SyncFailure("business_knowledge_not_prepared", "Business Knowledge was not parsed");
   }
   return value.document;
 }

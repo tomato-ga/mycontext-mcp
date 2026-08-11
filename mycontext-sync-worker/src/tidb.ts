@@ -4,12 +4,17 @@ import type {
   LoadedAuthorStyleDocument
 } from "../../mycontext-sync/src/authorStyle.js";
 import type {
+  BusinessKnowledgeSection,
+  LoadedBusinessKnowledgeDocument
+} from "../../mycontext-sync/src/businessKnowledge.js";
+import type {
   EditorKnowledgeSection,
   LoadedEditorKnowledgeSectionedDocument
 } from "../../mycontext-sync/src/editorKnowledge.js";
 import {
   SyncFailure,
   type AuthorStyleState,
+  type BusinessKnowledgeState,
   type EditorKnowledgeSectionedState,
   type SyncStateLogEntry,
   type SyncRepository
@@ -285,6 +290,88 @@ export class TidbSyncRepository implements SyncRepository {
     }
   }
 
+  async getBusinessKnowledgeState(documentId: string): Promise<BusinessKnowledgeState | null> {
+    const rows = await this.execute(
+      `SELECT section_revision_sha256, source_path_key
+       FROM business_knowledge_documents
+       WHERE document_id = ?
+       LIMIT 1`,
+      [documentId]
+    );
+    if (rows[0] === undefined) return null;
+    const row = record(rows[0]);
+    return {
+      activeSectionRevisionSha256: requiredString(
+        row.section_revision_sha256,
+        "section_revision_sha256"
+      ),
+      sourcePathKey: requiredString(row.source_path_key, "source_path_key")
+    };
+  }
+
+  async activateBusinessKnowledge(input: {
+    document: LoadedBusinessKnowledgeDocument;
+  }): Promise<void> {
+    const tx = await this.connection.begin();
+    try {
+      await tx.execute(
+        `INSERT INTO business_knowledge_documents
+          (document_id, title, source_path_key, source_kind, ingest_scope,
+           source_declared_at, source_bytes, source_line_count, source_mtime_ms,
+           markdown, markdown_sha256, section_revision_sha256, parser_version,
+           sectioning_version, section_count, search_span_count, outline_json,
+           routing_metadata_json, last_synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))
+         ON DUPLICATE KEY UPDATE
+          title = VALUES(title),
+          source_path_key = VALUES(source_path_key),
+          source_kind = VALUES(source_kind),
+          ingest_scope = VALUES(ingest_scope),
+          source_declared_at = VALUES(source_declared_at),
+          source_bytes = VALUES(source_bytes),
+          source_line_count = VALUES(source_line_count),
+          source_mtime_ms = VALUES(source_mtime_ms),
+          markdown = VALUES(markdown),
+          markdown_sha256 = VALUES(markdown_sha256),
+          section_revision_sha256 = VALUES(section_revision_sha256),
+          parser_version = VALUES(parser_version),
+          sectioning_version = VALUES(sectioning_version),
+          section_count = VALUES(section_count),
+          search_span_count = VALUES(search_span_count),
+          outline_json = VALUES(outline_json),
+          routing_metadata_json = VALUES(routing_metadata_json),
+          last_synced_at = NOW(3)`,
+        [
+          input.document.documentId,
+          input.document.title,
+          input.document.sourcePathKey,
+          input.document.sourceKind,
+          input.document.ingestScope,
+          input.document.sourceDeclaredAt,
+          input.document.sourceBytes,
+          input.document.sourceLineCount,
+          input.document.sourceMtimeMs,
+          input.document.markdown,
+          input.document.markdownSha256,
+          input.document.sectionRevisionSha256,
+          input.document.parserVersion,
+          input.document.sectioningVersion,
+          input.document.sectionCount,
+          input.document.searchSpanCount,
+          JSON.stringify(input.document.outline),
+          JSON.stringify(input.document.routingMetadata)
+        ]
+      );
+      for (const section of input.document.sections) {
+        await upsertBusinessKnowledgeSection(tx, section);
+      }
+      await tx.commit();
+    } catch (error) {
+      await safeRollback(tx);
+      throw databaseFailure(error);
+    }
+  }
+
   private async execute(sql: string, params: readonly unknown[] = []): Promise<Row[]> {
     try {
       return await this.connection.execute(sql, [...params]);
@@ -333,6 +420,65 @@ async function upsertEditorKnowledgeSection(
 ): Promise<void> {
   await tx.execute(
     `INSERT INTO editor_knowledge_sections
+      (document_id, section_id, section_revision_sha256, parent_section_id,
+       delivery_section_id, section_type, heading_level, section_number, title,
+       heading_path_json, content_layer, ordinal, source_line_start,
+       source_line_end, direct_markdown, section_markdown, retrieval_text,
+       content_sha256, is_searchable, related_source_path, freshness_class,
+       last_synced_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))
+     ON DUPLICATE KEY UPDATE
+      parent_section_id = VALUES(parent_section_id),
+      delivery_section_id = VALUES(delivery_section_id),
+      section_type = VALUES(section_type),
+      heading_level = VALUES(heading_level),
+      section_number = VALUES(section_number),
+      title = VALUES(title),
+      heading_path_json = VALUES(heading_path_json),
+      content_layer = VALUES(content_layer),
+      ordinal = VALUES(ordinal),
+      source_line_start = VALUES(source_line_start),
+      source_line_end = VALUES(source_line_end),
+      direct_markdown = VALUES(direct_markdown),
+      section_markdown = VALUES(section_markdown),
+      retrieval_text = VALUES(retrieval_text),
+      content_sha256 = VALUES(content_sha256),
+      is_searchable = VALUES(is_searchable),
+      related_source_path = VALUES(related_source_path),
+      freshness_class = VALUES(freshness_class),
+      last_synced_at = NOW(3)`,
+    [
+      section.documentId,
+      section.sectionId,
+      section.sectionRevisionSha256,
+      section.parentSectionId,
+      section.deliverySectionId,
+      section.sectionType,
+      section.headingLevel,
+      section.sectionNumber,
+      section.title,
+      JSON.stringify(section.headingPath),
+      section.contentLayer,
+      section.ordinal,
+      section.sourceLineStart,
+      section.sourceLineEnd,
+      section.directMarkdown,
+      section.sectionMarkdown,
+      section.retrievalText,
+      section.contentSha256,
+      section.isSearchable,
+      section.relatedSourcePath,
+      section.freshnessClass
+    ]
+  );
+}
+
+async function upsertBusinessKnowledgeSection(
+  tx: Tx<{ url: string }>,
+  section: BusinessKnowledgeSection
+): Promise<void> {
+  await tx.execute(
+    `INSERT INTO business_knowledge_sections
       (document_id, section_id, section_revision_sha256, parent_section_id,
        delivery_section_id, section_type, heading_level, section_number, title,
        heading_path_json, content_layer, ordinal, source_line_start,

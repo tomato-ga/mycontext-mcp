@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadedAuthorStyleDocument } from "../../mycontext-sync/src/authorStyle.js";
+import type { LoadedBusinessKnowledgeDocument } from "../../mycontext-sync/src/businessKnowledge.js";
 import { parseEditorKnowledgeSectionedMarkdown } from "../../mycontext-sync/src/editorKnowledge.js";
 import { sha256 } from "../src/hash.js";
 import {
@@ -50,7 +51,9 @@ describe("Notion-managed context synchronization", () => {
       getAuthorStyleState: vi.fn().mockResolvedValue(null),
       activateAuthorStyle: vi.fn(),
       getEditorKnowledgeSectionedState: vi.fn().mockResolvedValue(null),
-      activateEditorKnowledgeSectioned: vi.fn()
+      activateEditorKnowledgeSectioned: vi.fn(),
+      getBusinessKnowledgeState: vi.fn().mockResolvedValue(null),
+      activateBusinessKnowledge: vi.fn()
     };
   });
 
@@ -112,6 +115,39 @@ describe("Notion-managed context synchronization", () => {
     }));
     expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
       tidbTables: ["notion_pages"]
+    }));
+  });
+
+  it("syncs Business Knowledge through its semantic document and section tables", async () => {
+    currentManaged = managedDocument({
+      documentId: "small-company-selling-system",
+      name: "小さな会社の売れる仕組み",
+      category: "Business Knowledge",
+      schemaVersion: "business-knowledge-v1"
+    });
+    const document = businessKnowledgeDocument();
+
+    const result = await processSyncMessage(message("page.properties_updated"), {
+      notion,
+      repository,
+      parseBusinessKnowledge: () => document,
+      now: () => now
+    });
+
+    expect(result).toMatchObject({
+      status: "synced",
+      documentId: "small-company-selling-system",
+      revisionSha256: document.sectionRevisionSha256
+    });
+    expect(repository.activateBusinessKnowledge).toHaveBeenCalledWith({ document });
+    expect(notion.updateWorkflow).toHaveBeenNthCalledWith(1, pageId, {
+      status: "Syncing",
+      tidbTables: ["business_knowledge_documents", "business_knowledge_sections"],
+      validationError: null
+    });
+    expect(notion.updateWorkflow).toHaveBeenLastCalledWith(pageId, expect.objectContaining({
+      status: "Synced",
+      tidbTables: ["business_knowledge_documents", "business_knowledge_sections"]
     }));
   });
 
@@ -886,6 +922,54 @@ function authorStyleDocument(
     deliverySectionCount: 0,
     searchSpanCount: 0,
     sections: []
+  };
+}
+
+function businessKnowledgeDocument(): LoadedBusinessKnowledgeDocument {
+  const markdownValue = "# 小さな会社の売れる仕組み — 高精度文字起こし\n\n本文\n";
+  const revision = sha256("business-revision");
+  return {
+    documentId: "small-company-selling-system",
+    title: "小さな会社の売れる仕組み",
+    sourcePathKey: `notion:${pageId}`,
+    sourceKind: "book_transcription",
+    ingestScope: "full_text",
+    sourceDeclaredAt: "2024-10-23",
+    sourceBytes: new TextEncoder().encode(markdownValue).byteLength,
+    sourceLineCount: 3,
+    sourceMtimeMs: 1,
+    markdown: markdownValue,
+    markdownSha256: sha256(markdownValue),
+    sectionRevisionSha256: revision,
+    parserVersion: "book-transcription-parser-v1",
+    sectioningVersion: "toc-anchor-sectioning-v1",
+    sectionCount: 1,
+    searchSpanCount: 1,
+    outline: {},
+    routingMetadata: {},
+    sections: [{
+      documentId: "small-company-selling-system",
+      sectionId: "chapter-01",
+      sectionRevisionSha256: revision,
+      parentSectionId: null,
+      deliverySectionId: "chapter-01",
+      sectionType: "numbered_section",
+      headingLevel: 2,
+      sectionNumber: "1",
+      title: "第1章",
+      headingPath: ["小さな会社の売れる仕組み", "第1章"],
+      contentLayer: "detail",
+      ordinal: 1,
+      sourceLineStart: 1,
+      sourceLineEnd: 3,
+      directMarkdown: markdownValue,
+      sectionMarkdown: markdownValue,
+      retrievalText: markdownValue,
+      contentSha256: sha256(markdownValue),
+      isSearchable: true,
+      relatedSourcePath: null,
+      freshnessClass: "static_framework"
+    }]
   };
 }
 
