@@ -14,6 +14,7 @@ export interface Env {
   OAUTH_KV: KVNamespace;
   AUTH_KV: KVNamespace;
   OAUTH_PROVIDER: OAuthHelpers;
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
 }
 
 export interface AppConfig {

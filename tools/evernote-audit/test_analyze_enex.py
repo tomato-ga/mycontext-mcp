@@ -84,6 +84,20 @@ class AnalyzeEnexTests(unittest.TestCase):
             MODULE.apply_duplicate_metadata(notes)
             self.assertTrue(all(note.record["duplicate_count"] == 2 for note in notes))
 
+    def test_directory_discovery_matches_explicit_file_extensions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            nested = root / "archive.enex"
+            nested.mkdir()
+            files = [root / "lower.enex", nested / "upper.ENEX", nested / "mixed.EnEx"]
+            for path in files:
+                path.write_text(ENEX, encoding="utf-8")
+            (root / "unrelated.txt").write_text("ignored", encoding="utf-8")
+
+            expected = sorted(path.resolve() for path in files)
+            self.assertEqual(MODULE.collect_enex_files(files), expected)
+            self.assertEqual(MODULE.collect_enex_files([root, files[0]]), expected)
+
     def test_cli_outputs_and_count_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

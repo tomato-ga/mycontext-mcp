@@ -73,7 +73,7 @@ Author Styleの同期元は上記2ページに固定されています。ペー�
 
 `Ready`ではNotion APIが返す本文を正本として検証し、文書行と現行section行を同一トランザクションで置換します。同じ内容なら`context_sha256`でskipし、履歴行は作りません。
 
-Notionでは最初のH1がページタイトルになる場合があるため、author-style parserへ渡すときだけ`Name`からH1を復元します。Notion本文そのものはWorkerが変更しません。従来の`pull-author-style`は`source_path_key`が`notion:<page-id>`になった文書をローカルMarkdownから上書きしません。
+Notionでは最初のH1がページタイトルになる場合があるため、author-style parserへ渡すときだけ`Name`からH1を復元します。Notion本文そのものはWorkerが変更しません。
 
 ## Secrets and permissions
 
@@ -156,7 +156,7 @@ pnpm exec wrangler deploy --dry-run
 
 ## Emergency Markdown
 
-ローカルMarkdownは通常同期に参加しません。TiDB current snapshotの緊急スナップショットと、明示的な復旧だけに使います。
+Author StyleのローカルMarkdownは通常同期に参加しません。TiDB current snapshotの緊急スナップショットと、明示的な復旧だけに使います。
 
 ```bash
 cd ../mycontext-sync
@@ -167,6 +167,6 @@ pnpm restore-author-style-markdown -- --document-id ore-body-style \
   --input-path /private/path/snapshot.md --activate-emergency
 ```
 
-exportは原文`.md`とmetadata `.md.json`を分離して保存し、原文へfrontmatterを加えません。restoreは`--activate-emergency`がなければTiDBを書き換えません。緊急snapshotの`source_path_key`は`emergency:<absolute-path>`となります。Notion復旧後は、Notion上の正しい本文を確認して`Ready`へ戻すとcurrent snapshotが置き換わります。
+exportは原文`.md`とmetadata `.md.json`を分離して保存し、原文へfrontmatterを加えません。restoreは`--activate-emergency`がなければTiDBを書き換えません。緊急snapshotの`source_path_key`はexport時のNotion所有元キー（`notion:<page-id>`）をそのまま維持します。Notion復旧後は、Notion上の正しい本文を確認して`Ready`へ戻すとcurrent snapshotが置き換わります。
 
 Personal Contextのローカル退避には既存の`pnpm export-obsidian`を使用できます。いずれのexportファイルも通常同期の入力にはなりません。

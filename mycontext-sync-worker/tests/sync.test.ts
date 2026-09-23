@@ -5,6 +5,7 @@ import { parseEditorKnowledgeSectionedMarkdown } from "../../mycontext-sync/src/
 import { sha256 } from "../src/hash.js";
 import {
   canonicalAuthorStyleMarkdown,
+  canonicalEditorKnowledgeMarkdown,
   processSyncMessage,
   syncFingerprint
 } from "../src/sync.js";
@@ -543,6 +544,46 @@ describe("Notion-managed context synchronization", () => {
     )).toBe("# Existing title\n\nBody");
   });
 
+  it("keeps a real H1 after a blank line while ignoring H1-shaped code", () => {
+    const markdown = [
+      "導入",
+      "",
+      "# Existing title",
+      "",
+      "```markdown",
+      "# This is code, not a title",
+      "```",
+      "",
+      "本文"
+    ].join("\n");
+
+    expect(canonicalAuthorStyleMarkdown(managedDocument({ name: "Ignored" }), markdown))
+      .toBe(markdown);
+    expect(canonicalEditorKnowledgeMarkdown(managedDocument({ name: "Ignored" }), markdown))
+      .toBe(markdown);
+  });
+
+  it("does not close a long fence with a short marker, another fence character, or trailing text", () => {
+    const markdown = [
+      "````markdown",
+      "# This is code, not a title",
+      "```",
+      "# This is still code",
+      "~~~~",
+      "# This is also still code",
+      "```` not a closing fence",
+      "# This is still code too",
+      "````   ",
+      "## Body"
+    ].join("\n");
+    const expected = `# Page title\n\n${markdown}`;
+
+    expect(canonicalAuthorStyleMarkdown(managedDocument({ name: "Page title" }), markdown))
+      .toBe(expected);
+    expect(canonicalEditorKnowledgeMarkdown(managedDocument({ name: "Page title" }), markdown))
+      .toBe(expected);
+  });
+
   describe("Editor Knowledge (kikaku) synchronization", () => {
     it("restores the H1 from the Notion page Name when the page body has none, like Author Style", async () => {
       // Notion page bodies hold only the content blocks; the title lives in the Name
@@ -573,6 +614,38 @@ describe("Notion-managed context synchronization", () => {
       expect(result).toMatchObject({ status: "synced" });
       const activated = vi.mocked(repository.activateEditorKnowledgeSectioned).mock.calls[0]?.[0];
       expect(activated?.document.title).toBe("企画構成プレイブック");
+      expect(activated?.document.markdown.startsWith("# 企画構成プレイブック\n\n## 1. 企画の立て方")).toBe(true);
+    });
+
+    it("restores the H1 when a fenced code example contains an H1-shaped line", async () => {
+      const bodyWithoutH1 = [
+        "## 1. 企画の立て方",
+        "第1章の本文。",
+        "",
+        "```markdown",
+        "# This is code, not the page title",
+        "```",
+        "",
+        "## 2. 構成の作り方",
+        "第2章の本文。",
+        ""
+      ].join("\n");
+      currentManaged = managedDocument({
+        documentId: "kikaku-composition-playbook",
+        name: "企画構成プレイブック",
+        category: "Editor Knowledge",
+        schemaVersion: "editor-knowledge-v1"
+      });
+      vi.mocked(notion.getMarkdown).mockResolvedValue(markdown(bodyWithoutH1));
+
+      const result = await processSyncMessage(message("page.properties_updated"), {
+        notion,
+        repository,
+        now: () => now
+      });
+
+      expect(result).toMatchObject({ status: "synced" });
+      const activated = vi.mocked(repository.activateEditorKnowledgeSectioned).mock.calls[0]?.[0];
       expect(activated?.document.markdown.startsWith("# 企画構成プレイブック\n\n## 1. 企画の立て方")).toBe(true);
     });
 

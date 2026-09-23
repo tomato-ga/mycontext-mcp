@@ -7,10 +7,6 @@ import type {
   LoadedBusinessKnowledgeDocument
 } from "./businessKnowledge.js";
 import type {
-  EditorKnowledgeSection,
-  LoadedEditorKnowledgeSectionedDocument
-} from "./editorKnowledge.js";
-import type {
   AuthorStyleSection,
   LoadedAuthorStyleDocument
 } from "./authorStyle.js";
@@ -57,30 +53,6 @@ export interface EditorKnowledgeDocumentRow extends RowDataPacket {
   section_count: number | null;
   search_span_count: number | null;
   last_synced_at: Date | string;
-}
-
-export interface EditorKnowledgeSectionRow extends RowDataPacket {
-  document_id: string;
-  section_id: string;
-  section_revision_sha256: string;
-  parent_section_id: string | null;
-  delivery_section_id: string;
-  section_type: string;
-  heading_level: number | null;
-  section_number: string | null;
-  title: string;
-  heading_path_json: string | string[];
-  content_layer: string;
-  ordinal: number;
-  source_line_start: number;
-  source_line_end: number;
-  direct_markdown: string;
-  section_markdown: string;
-  retrieval_text: string;
-  content_sha256: string;
-  is_searchable: number | boolean;
-  related_source_path: string | null;
-  freshness_class: string;
 }
 
 export interface EditorKnowledgeSchemaGuardColumnConflict {
@@ -475,88 +447,6 @@ export class TidbClient {
     return rows[0] ?? null;
   }
 
-  async getEditorKnowledgeSectionedDocumentRevision(documentId: string): Promise<string | null> {
-    const [rows] = await this.pool.execute<Array<RowDataPacket & { active_revision_sha256: string | null }>>(
-      `SELECT COALESCE(section_revision_sha256, markdown_sha256) AS active_revision_sha256
-       FROM editor_knowledge_documents
-       WHERE document_id = ?
-       LIMIT 1`,
-      [documentId]
-    );
-    return rows[0]?.active_revision_sha256 ?? null;
-  }
-
-  async upsertEditorKnowledgeSectionedDocumentAndSections(
-    document: LoadedEditorKnowledgeSectionedDocument
-  ): Promise<void> {
-    const connection = await this.pool.getConnection();
-    try {
-      const wholeDocument = document.storageMode === "whole_document";
-      await connection.beginTransaction();
-      await connection.execute(
-        `INSERT INTO editor_knowledge_documents
-          (document_id, title, markdown, markdown_sha256,
-           section_revision_sha256, section_count, search_span_count, last_synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3))
-         ON DUPLICATE KEY UPDATE
-          title = VALUES(title),
-          markdown = VALUES(markdown),
-          markdown_sha256 = VALUES(markdown_sha256),
-          section_revision_sha256 = VALUES(section_revision_sha256),
-          section_count = VALUES(section_count),
-          search_span_count = VALUES(search_span_count),
-          last_synced_at = NOW(3)`,
-        [
-          document.documentId,
-          document.title,
-          document.markdown,
-          document.markdownSha256,
-          wholeDocument ? null : document.sectionRevisionSha256,
-          wholeDocument ? null : document.sectionCount,
-          wholeDocument ? null : document.searchSpanCount
-        ]
-      );
-
-      if (wholeDocument) {
-        await connection.execute(
-          "DELETE FROM editor_knowledge_sections WHERE document_id = ?",
-          [document.documentId]
-        );
-      } else {
-        for (const section of document.sections) {
-          await upsertEditorKnowledgeSection(connection, section);
-        }
-      }
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  async listEditorKnowledgeSections(
-    documentId: string,
-    sectionRevisionSha256: string
-  ): Promise<EditorKnowledgeSectionRow[]> {
-    const [rows] = await this.pool.execute<EditorKnowledgeSectionRow[]>(
-      `SELECT document_id, section_id, section_revision_sha256,
-              parent_section_id, delivery_section_id, section_type,
-              heading_level, section_number, title, heading_path_json,
-              content_layer, ordinal,
-              source_line_start, source_line_end, direct_markdown,
-              section_markdown, retrieval_text, content_sha256, is_searchable,
-              related_source_path, freshness_class
-       FROM editor_knowledge_sections
-       WHERE document_id = ?
-         AND section_revision_sha256 = ?
-       ORDER BY ordinal ASC`,
-      [documentId, sectionRevisionSha256]
-    );
-    return rows;
-  }
-
   /**
    * Read-only pre-flight check for editor-knowledge-schema.sql, run by
    * migrate-editor-knowledge before applying anything. The migration itself is already
@@ -611,40 +501,6 @@ export class TidbClient {
       [documentId]
     );
     return rows[0]?.section_revision_sha256 ?? null;
-  }
-
-  async getAuthorStyleDocumentContextSha256(documentId: string): Promise<string | null> {
-    const [rows] = await this.pool.execute<Array<RowDataPacket & { context_sha256: string }>>(
-      `SELECT context_sha256
-       FROM author_style_documents
-       WHERE document_id = ?
-       LIMIT 1`,
-      [documentId]
-    );
-    return rows[0]?.context_sha256 ?? null;
-  }
-
-  async getAuthorStyleDocumentState(documentId: string): Promise<{
-    contextSha256: string;
-    sourcePathKey: string;
-  } | null> {
-    const [rows] = await this.pool.execute<Array<RowDataPacket & {
-      context_sha256: string;
-      source_path_key: string;
-    }>>(
-      `SELECT context_sha256, source_path_key
-       FROM author_style_documents
-       WHERE document_id = ?
-       LIMIT 1`,
-      [documentId]
-    );
-    const row = rows[0];
-    return row === undefined
-      ? null
-      : {
-          contextSha256: row.context_sha256,
-          sourcePathKey: row.source_path_key
-        };
   }
 
   async upsertAuthorStyleDocumentAndSections(document: LoadedAuthorStyleDocument): Promise<void> {
@@ -1044,65 +900,6 @@ async function upsertBusinessKnowledgeSection(
 ): Promise<void> {
   await connection.execute(
     `INSERT INTO business_knowledge_sections
-      (document_id, section_id, section_revision_sha256, parent_section_id,
-       delivery_section_id, section_type, heading_level, section_number, title,
-       heading_path_json, content_layer, ordinal, source_line_start,
-       source_line_end, direct_markdown, section_markdown, retrieval_text,
-       content_sha256, is_searchable, related_source_path, freshness_class,
-       last_synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))
-     ON DUPLICATE KEY UPDATE
-      parent_section_id = VALUES(parent_section_id),
-      delivery_section_id = VALUES(delivery_section_id),
-      section_type = VALUES(section_type),
-      heading_level = VALUES(heading_level),
-      section_number = VALUES(section_number),
-      title = VALUES(title),
-      heading_path_json = VALUES(heading_path_json),
-      content_layer = VALUES(content_layer),
-      ordinal = VALUES(ordinal),
-      source_line_start = VALUES(source_line_start),
-      source_line_end = VALUES(source_line_end),
-      direct_markdown = VALUES(direct_markdown),
-      section_markdown = VALUES(section_markdown),
-      retrieval_text = VALUES(retrieval_text),
-      content_sha256 = VALUES(content_sha256),
-      is_searchable = VALUES(is_searchable),
-      related_source_path = VALUES(related_source_path),
-      freshness_class = VALUES(freshness_class),
-      last_synced_at = NOW(3)`,
-    [
-      section.documentId,
-      section.sectionId,
-      section.sectionRevisionSha256,
-      section.parentSectionId,
-      section.deliverySectionId,
-      section.sectionType,
-      section.headingLevel,
-      section.sectionNumber,
-      section.title,
-      JSON.stringify(section.headingPath),
-      section.contentLayer,
-      section.ordinal,
-      section.sourceLineStart,
-      section.sourceLineEnd,
-      section.directMarkdown,
-      section.sectionMarkdown,
-      section.retrievalText,
-      section.contentSha256,
-      section.isSearchable,
-      section.relatedSourcePath,
-      section.freshnessClass
-    ]
-  );
-}
-
-async function upsertEditorKnowledgeSection(
-  connection: PoolConnection,
-  section: EditorKnowledgeSection
-): Promise<void> {
-  await connection.execute(
-    `INSERT INTO editor_knowledge_sections
       (document_id, section_id, section_revision_sha256, parent_section_id,
        delivery_section_id, section_type, heading_level, section_number, title,
        heading_path_json, content_layer, ordinal, source_line_start,

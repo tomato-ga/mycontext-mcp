@@ -12,13 +12,10 @@ import { runMigrate } from "./commands/migrate.js";
 import { runMigrateBusinessKnowledge } from "./commands/migrateBusinessKnowledge.js";
 import { runMigrateEditorKnowledge } from "./commands/migrateEditorKnowledge.js";
 import { runMigrateAuthorStyle } from "./commands/migrateAuthorStyle.js";
-import { runTransitionAuthorStyleCurrent } from "./commands/transitionAuthorStyleCurrent.js";
-import { runFinalizeAuthorStyleCurrent } from "./commands/finalizeAuthorStyleCurrent.js";
 import { runMigrateMetaskill } from "./commands/migrateMetaskill.js";
 import { runMigrateSyncStateLog } from "./commands/migrateSyncStateLog.js";
 import { runPull } from "./commands/pull.js";
 import { runPullBusinessKnowledge } from "./commands/pullBusinessKnowledge.js";
-import { runPullAuthorStyle } from "./commands/pullAuthorStyle.js";
 import { runPullEditorKnowledge } from "./commands/pullEditorKnowledge.js";
 import { runPullMetaskill } from "./commands/pullMetaskill.js";
 import { runSearch } from "./commands/search.js";
@@ -47,12 +44,6 @@ try {
     case "migrate-author-style":
       await runMigrateAuthorStyle(flags);
       break;
-    case "transition-author-style-current":
-      await runTransitionAuthorStyleCurrent(flags);
-      break;
-    case "finalize-author-style-current":
-      await runFinalizeAuthorStyleCurrent(flags);
-      break;
     case "migrate-metaskill":
       await runMigrateMetaskill(flags);
       break;
@@ -61,9 +52,6 @@ try {
       break;
     case "pull-business-knowledge":
       await runPullBusinessKnowledge(flags);
-      break;
-    case "pull-author-style":
-      await runPullAuthorStyle(flags);
       break;
     case "pull-metaskill":
       await runPullMetaskill(flags);

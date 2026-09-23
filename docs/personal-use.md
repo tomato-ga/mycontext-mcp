@@ -27,7 +27,6 @@ Keep personal Notion seed pages in `.env`:
 MIRROR_CONFIG_JSON={"pages":[{"pageId":"your-private-page-id","title":"your-private-page-title"}]}
 EDITOR_KNOWLEDGE_SOURCE_ROOT=/absolute/path/to/noteAI
 BUSINESS_KNOWLEDGE_SOURCE_ROOT=/absolute/path/to/claude/skills
-AUTHOR_STYLE_SOURCE_ROOT=/absolute/path/to/noteAI
 ```
 
 `MIRROR_CONFIG_JSON` takes precedence over `mirror.config.json`. This lets you
@@ -39,11 +38,6 @@ is absent, the CLI reads `mirror.config.json` as before.
 `BUSINESS_KNOWLEDGE_SOURCE_ROOT` is used only with a fixed two-file allowlist.
 The absolute value is never stored in TiDB or exposed by MCP; TiDB stores only
 the public-safe relative source key.
-
-`AUTHOR_STYLE_SOURCE_ROOT` is local-only and reserved for explicit emergency
-restore/diagnostic commands. Normal author-style synchronization accepts only
-the two configured Notion pages. TiDB stores one current source snapshot and
-current semantic sections, never historical revisions or the machine-local root.
 
 For the business corpus, use the dedicated migration and sync commands. They
 only create/write `business_knowledge_documents` and

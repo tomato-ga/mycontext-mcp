@@ -14,6 +14,7 @@ import {
   type LoadedEditorKnowledgeSectionedDocument
 } from "../../mycontext-sync/src/editorKnowledge.js";
 import { sha256 } from "./hash.js";
+import { hasNonFencedH1 } from "./markdown.js";
 import type { AuthorStylePageIds } from "./config.js";
 import {
   SMALL_COMPANY_SELLING_SYSTEM_DOCUMENT_ID,
@@ -673,7 +674,7 @@ export function canonicalAuthorStyleMarkdown(
   managed: Pick<ManagedNotionDocument, "name">,
   markdown: string
 ): string {
-  if (/^#(?!#)\s+\S/m.test(markdown)) return markdown;
+  if (hasNonFencedH1(markdown)) return markdown;
   return `# ${managed.name}\n\n${markdown}`;
 }
 
@@ -687,7 +688,7 @@ export function canonicalEditorKnowledgeMarkdown(
   managed: Pick<ManagedNotionDocument, "name">,
   markdown: string
 ): string {
-  if (/^#(?!#)\s+\S/m.test(markdown)) return markdown;
+  if (hasNonFencedH1(markdown)) return markdown;
   return `# ${managed.name}\n\n${markdown}`;
 }
 

@@ -7,6 +7,7 @@ import {
   type LoadedBusinessKnowledgeDocument
 } from "../../mycontext-sync/src/businessKnowledge.js";
 import { sha256 } from "./hash.js";
+import { hasNonFencedH1 } from "./markdown.js";
 import { SyncFailure } from "./types.js";
 
 export const SMALL_COMPANY_SELLING_SYSTEM_DOCUMENT_ID =
@@ -246,7 +247,7 @@ export function canonicalSmallCompanySellingSystemMarkdown(markdown: string): st
   if (normalized.startsWith(`${SMALL_COMPANY_SELLING_SYSTEM_SOURCE_H1}\n`)) {
     return normalized.endsWith("\n") ? normalized : `${normalized}\n`;
   }
-  if (/^#(?!#)\s+\S/m.test(normalized)) {
+  if (hasNonFencedH1(normalized)) {
     throw new SyncFailure(
       "business_knowledge_unexpected_h1",
       "Business Knowledge body contains an unexpected H1"

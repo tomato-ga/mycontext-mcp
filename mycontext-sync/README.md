@@ -33,8 +33,8 @@ Implemented:
 - Fixed 2-document, section-first business knowledge sync via the dedicated
   `migrate-business-knowledge`, `pull-business-knowledge`, and
   `doctor-business-knowledge` commands.
-- Fixed title/body author-style sync via `migrate-author-style`,
-  `pull-author-style`, and `doctor-author-style`.
+- Fixed title/body author-style current-schema migration via
+  `migrate-author-style` and verification via `doctor-author-style`.
 - Fixed Metaskill transcription sync via `migrate-metaskill`,
   `pull-metaskill`, and `doctor-metaskill`.
 - Plain `LIKE` search over `notion_pages.markdown`.
@@ -65,11 +65,9 @@ Not implemented, by design:
 6. Set `BUSINESS_KNOWLEDGE_SOURCE_ROOT` to the absolute directory containing
    `startup-science/` and `marketing-wisdom/`. Only the two fixed source paths
    are read.
-7. Set `AUTHOR_STYLE_SOURCE_ROOT` to the absolute noteAI repository path. Only
-   the fixed title/body style files in `knowledge/` are read.
-8. Set `METASKILL_SOURCE_ROOT` to the absolute Kindle repository path. Only
+7. Set `METASKILL_SOURCE_ROOT` to the absolute Kindle repository path. Only
    `docs/メタスキル_文字起こし.md` is read.
-9. Install dependencies:
+8. Install dependencies:
 
 ```bash
 pnpm install
@@ -91,10 +89,6 @@ pnpm pull-business-knowledge
 pnpm pull-business-knowledge -- --dry-run
 pnpm doctor-business-knowledge
 pnpm migrate-author-style
-pnpm transition-author-style-current
-pnpm finalize-author-style-current
-pnpm pull-author-style
-pnpm pull-author-style -- --dry-run
 pnpm doctor-author-style
 pnpm migrate-metaskill
 pnpm pull-metaskill
@@ -127,9 +121,9 @@ Use `pnpm run search`; bare `pnpm search` is pnpm's registry search command.
    `_notion_pages/` directory.
 9. Run `pnpm run search -- --query "<a phrase from the Notion page>" --top-k 5`;
    expect rows with full-page Markdown excerpts.
-10. Run `pnpm migrate-author-style`, `pnpm pull-author-style`, and
-    `pnpm doctor-author-style`; expect 2 active documents and every routing
-    combination to fit without truncation.
+10. Run `pnpm migrate-author-style`; after the fixed Notion pages are synced
+    from `Ready`, run `pnpm doctor-author-style`; expect 2 active documents
+    and every routing combination to fit without truncation.
 11. Run `pnpm migrate-metaskill`, `pnpm pull-metaskill`, and
     `pnpm doctor-metaskill`; expect 1 active document, 40 delivery sections,
     230 searchable spans, and all 69 valid routes to fit without truncation.

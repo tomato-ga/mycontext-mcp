@@ -16,7 +16,7 @@ Notion MyContext Documents (Status = Ready)
 noteAI editor knowledge Markdown
   -> mycontext-sync
   -> TiDB editor_knowledge_documents
-Claude skill business knowledge Markdown (fixed 3 files)
+Claude skill business knowledge Markdown (fixed 2 files)
   -> mycontext-sync section-aware parser
   -> TiDB business_knowledge_documents + business_knowledge_sections
 Notion author-style pages (fixed title/body pages)
@@ -48,7 +48,7 @@ TiDB notion_pages
 
 ## 個人利用と公開repoの分離
 
-個人の Notion pageId/title、ローカルMarkdown同期元の絶対パス、Notion API key、TiDB credentials、OAuth secretsは公開repoに入れません。ローカルでは `mycontext-sync/.env` の `MIRROR_CONFIG_JSON` / `EDITOR_KNOWLEDGE_SOURCE_ROOT` / `BUSINESS_KNOWLEDGE_SOURCE_ROOT` / `AUTHOR_STYLE_SOURCE_ROOT` / `METASKILL_SOURCE_ROOT` と、各Worker用の `.dev.vars` / Wrangler secrets で管理します。
+個人の Notion pageId/title、ローカルMarkdown同期元の絶対パス、Notion API key、TiDB credentials、OAuth secretsは公開repoに入れません。ローカルでは `mycontext-sync/.env` の `MIRROR_CONFIG_JSON` / `EDITOR_KNOWLEDGE_SOURCE_ROOT` / `BUSINESS_KNOWLEDGE_SOURCE_ROOT` / `METASKILL_SOURCE_ROOT` と、各Worker用の `.dev.vars` / Wrangler secrets で管理します。
 
 詳細は [docs/personal-use.md](docs/personal-use.md) を参照してください。push前には次を実行できます。
 
@@ -179,8 +179,8 @@ metaskill_sections(
 5. `.env` の `EDITOR_KNOWLEDGE_SOURCE_ROOT` を設定し、`pnpm pull-editor-knowledge` で固定8件を差分同期する。
 6. `pnpm doctor-editor-knowledge` でローカルMarkdownとTiDBのハッシュ一致を検証する。
 7. `.env` の `BUSINESS_KNOWLEDGE_SOURCE_ROOT` を設定し、`pnpm migrate-business-knowledge`で専用2テーブルだけを作成する。
-8. `pnpm pull-business-knowledge`で固定3文書をsection-aware同期し、`pnpm doctor-business-knowledge`で原文・section revision・件数・hashを検証する。
-9. `pnpm migrate-author-style`でAuthor Styleのcurrent-snapshot tableを準備し、固定された2つのNotionページを同期Workerで検証・同期する。ローカル`pull-author-style`の対象はtitle文書だけで、bodyの緊急復旧はTiDBからexportした同一構造のsnapshotだけを受け付ける。
+8. `pnpm pull-business-knowledge`で固定2文書をsection-aware同期し、`pnpm doctor-business-knowledge`で原文・section revision・件数・hashを検証する。
+9. `pnpm migrate-author-style`でAuthor Styleのcurrent-snapshot tableを準備し、固定された2つのNotionページを同期Workerで検証・同期する。
 10. `.env` の `METASKILL_SOURCE_ROOT` を設定し、`pnpm migrate-metaskill`、`pnpm pull-metaskill`、`pnpm doctor-metaskill`で固定1文書・意味section・全topic routingを検証する。
 11. `pnpm run search` でNotion Markdownをローカル検証できる。
 12. 必要に応じて `pnpm export-obsidian` で Obsidian vault の `_notion_pages/` に Markdown を書き出す。
@@ -236,7 +236,6 @@ pnpm migrate-business-knowledge
 pnpm pull-business-knowledge
 pnpm doctor-business-knowledge
 pnpm migrate-author-style
-pnpm pull-author-style
 pnpm doctor-author-style
 pnpm migrate-metaskill
 pnpm pull-metaskill
@@ -281,10 +280,12 @@ mycontext-sync/scripts/run-obsidian-sync.sh
 ```bash
 cd mycontext-mcp-worker
 pnpm install --frozen-lockfile --strict-peer-dependencies
-pnpm run typecheck
-pnpm test
-pnpm run deploy:dry-run
+pnpm run release:preflight
 ```
+
+production deployの正式経路は`pnpm run deploy`だけです。この経路はローカルgate、
+Cloudflare deploy、今回のWorker versionに固定した公開MCP read-backを実行し、
+公開検証に失敗した場合は直前のversionへ自動rollbackします。
 
 ローカル起動後のendpoint確認:
 
@@ -339,8 +340,6 @@ pnpm doctor-editor-knowledge
 pnpm pull-business-knowledge -- --dry-run
 pnpm pull-business-knowledge -- --reindex
 pnpm doctor-business-knowledge
-pnpm pull-author-style -- --dry-run
-pnpm pull-author-style -- --reindex
 pnpm doctor-author-style
 ```
 

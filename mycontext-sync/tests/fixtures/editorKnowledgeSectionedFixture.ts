@@ -1,12 +1,9 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import type {
   EditorKnowledgeSectionedDocumentId,
-  EditorKnowledgeSectionedSource
+  EditorKnowledgeSectionedMarkdownInput
 } from "../../src/editorKnowledge.js";
 
-export async function writeKikakuPlaybookFixture() {
+export function createKikakuPlaybookFixture(): EditorKnowledgeSectionedMarkdownInput {
   const markdown = [
     "# 企画構成プレイブック テスト版",
     "",
@@ -23,10 +20,10 @@ export async function writeKikakuPlaybookFixture() {
     "第3章の本文。",
     ""
   ].join("\n");
-  return writeKikakuSourceFixture("kikaku-composition-playbook", markdown);
+  return createKikakuSourceFixture("kikaku-composition-playbook", markdown);
 }
 
-export async function writeKikakuCatalogFixture() {
+export function createKikakuCatalogFixture(): EditorKnowledgeSectionedMarkdownInput {
   const markdown = [
     "# 企画カタログ427 テスト版",
     "",
@@ -49,10 +46,10 @@ export async function writeKikakuCatalogFixture() {
     "番号なしエントリの本文。",
     ""
   ].join("\n");
-  return writeKikakuSourceFixture("kikaku-db-catalog", markdown);
+  return createKikakuSourceFixture("kikaku-db-catalog", markdown);
 }
 
-export async function writeKikakuFulltextFixture() {
+export function createKikakuFulltextFixture(): EditorKnowledgeSectionedMarkdownInput {
   const markdown = [
     "# 企画ノウハウ全文集 3（No.97〜No.144）",
     "",
@@ -76,22 +73,16 @@ export async function writeKikakuFulltextFixture() {
     "根拠ノート本文はDB上に存在しない（本文取得状態: 未特定）。索引の要旨を参照。",
     ""
   ].join("\n");
-  return writeKikakuSourceFixture("kikaku-fulltext-3", markdown);
+  return createKikakuSourceFixture("kikaku-fulltext-3", markdown);
 }
 
-export async function writeKikakuSourceFixture(
+export function createKikakuSourceFixture(
   documentId: EditorKnowledgeSectionedDocumentId,
   markdown: string
-) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), `editor-${documentId}-`));
-  const relativePath = documentId === "kikaku-composition-playbook"
-    ? "kikaku/composition-playbook.md"
-    : documentId === "kikaku-db-catalog"
-      ? "kikaku/kikaku-db-catalog.md"
-      : `kikaku/${documentId}.md`;
-  const source: EditorKnowledgeSectionedSource = { documentId, relativePath };
-  const target = path.join(root, relativePath);
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, markdown, "utf8");
-  return { root, source, markdown };
+): EditorKnowledgeSectionedMarkdownInput {
+  return {
+    documentId,
+    markdown,
+    sourcePathKey: `notion:fixture:${documentId}`
+  };
 }

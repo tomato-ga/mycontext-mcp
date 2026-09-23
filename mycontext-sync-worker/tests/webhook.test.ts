@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { SyncConfig } from "../src/config.js";
+import type { Env, SyncConfig } from "../src/config.js";
+import worker from "../src/index.js";
 import { handleNotionWebhook } from "../src/webhook.js";
 
 const config: SyncConfig = {
@@ -39,14 +40,22 @@ describe("Notion webhook", () => {
     });
     const signature = `sha256=${createHmac("sha256", "verification-token").update(raw).digest("hex")}`;
     const queue = { send: vi.fn().mockResolvedValue(undefined) };
-    const response = await handleNotionWebhook(
+    const response = await worker.fetch(
       new Request("https://sync.example/webhooks/notion", {
         method: "POST",
         body: raw,
         headers: { "X-Notion-Signature": signature }
       }),
-      { SYNC_QUEUE: queue as never },
-      config
+      {
+        TIDB_DATABASE_URL: config.tidbDatabaseUrl,
+        NOTION_API_TOKEN: config.notionApiToken,
+        NOTION_DATA_SOURCE_ID: config.notionDataSourceId,
+        NOTION_WEBHOOK_BOOTSTRAP_SECRET: config.notionWebhookBootstrapSecret,
+        NOTION_WEBHOOK_VERIFICATION_TOKEN: config.notionWebhookVerificationToken,
+        AUTHOR_STYLE_TITLE_PAGE_ID: config.authorStylePageIds["ore-title-style"],
+        AUTHOR_STYLE_BODY_PAGE_ID: config.authorStylePageIds["ore-body-style"],
+        SYNC_QUEUE: queue as never
+      } satisfies Env
     );
     expect(response.status).toBe(202);
     expect(queue.send).toHaveBeenCalledWith(expect.objectContaining({
@@ -54,6 +63,37 @@ describe("Notion webhook", () => {
       pageId: "page-1",
       eventType: "page.properties_updated"
     }));
+  });
+
+  it("returns a temporary failure when queue publishing fails so the webhook can be retried", async () => {
+    const raw = JSON.stringify({
+      id: "event-queue-failure",
+      timestamp: "2026-07-22T12:00:00.000Z",
+      type: "page.properties_updated",
+      entity: { type: "page", id: "page-1" }
+    });
+    const signature = `sha256=${createHmac("sha256", "verification-token").update(raw).digest("hex")}`;
+    const queue = { send: vi.fn().mockRejectedValue(new Error("queue unavailable")) };
+    const response = await worker.fetch(
+      new Request("https://sync.example/webhooks/notion", {
+        method: "POST",
+        body: raw,
+        headers: { "X-Notion-Signature": signature }
+      }),
+      {
+        TIDB_DATABASE_URL: config.tidbDatabaseUrl,
+        NOTION_API_TOKEN: config.notionApiToken,
+        NOTION_DATA_SOURCE_ID: config.notionDataSourceId,
+        NOTION_WEBHOOK_BOOTSTRAP_SECRET: config.notionWebhookBootstrapSecret,
+        NOTION_WEBHOOK_VERIFICATION_TOKEN: config.notionWebhookVerificationToken,
+        AUTHOR_STYLE_TITLE_PAGE_ID: config.authorStylePageIds["ore-title-style"],
+        AUTHOR_STYLE_BODY_PAGE_ID: config.authorStylePageIds["ore-body-style"],
+        SYNC_QUEUE: queue as never
+      } satisfies Env
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ ok: false, error: "queue temporarily unavailable" });
   });
 
   it("acknowledges irrelevant signed events without queueing", async () => {

@@ -39,6 +39,44 @@ describe("editor knowledge sources", () => {
     });
   });
 
+  it("allows a filesystem root as the configured source root", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "editor-knowledge-root-"));
+    const target = path.join(root, "lesson.md");
+    const markdown = "# 第4回: 編集作業\n\n本文\n";
+    await fs.writeFile(target, markdown, "utf8");
+    const filesystemRoot = path.parse(target).root;
+    const source = sourceFor(path.relative(filesystemRoot, target));
+
+    await expect(loadEditorKnowledgeDocument(filesystemRoot, source)).resolves.toMatchObject({
+      documentId: "lesson-04",
+      title: "第4回: 編集作業",
+      markdown
+    });
+  });
+
+  it("rejects a source path that escapes the configured root", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "editor-knowledge-escape-"));
+
+    await expect(loadEditorKnowledgeDocument(root, sourceFor("../outside.md"))).rejects.toMatchObject({
+      code: "editor_knowledge_path_escape"
+    });
+    await expect(loadEditorKnowledgeDocument(root, sourceFor("."))).rejects.toMatchObject({
+      code: "editor_knowledge_path_escape"
+    });
+  });
+
+  it("allows an in-root filename beginning with two dots", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "editor-knowledge-dotfile-"));
+    const markdown = "# 第4回: 編集作業\n\n本文\n";
+    await fs.writeFile(path.join(root, "..lesson.md"), markdown, "utf8");
+
+    await expect(loadEditorKnowledgeDocument(root, sourceFor("..lesson.md"))).resolves.toMatchObject({
+      documentId: "lesson-04",
+      title: "第4回: 編集作業",
+      markdown
+    });
+  });
+
   it("rejects invalid UTF-8", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "editor-knowledge-"));
     const source = sourceFor("invalid.md");

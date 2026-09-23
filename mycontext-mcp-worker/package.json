@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config ./wrangler.jsonc --name mycontext-mcp",
-    "deploy": "wrangler deploy --strict --config ./wrangler.jsonc --name mycontext-mcp",
+    "deploy": "node ./scripts/release.mjs",
     "deploy:dry-run": "wrangler deploy --dry-run --strict --config ./wrangler.jsonc --name mycontext-mcp",
+    "release:preflight": "node ./scripts/release.mjs --preflight-only",
+    "verify:public-mcp": "node ./scripts/verify-public-mcp.mjs",
     "test": "vitest run",
     "test:live-planning-playbook": "LIVE_PLANNING_PLAYBOOK_SMOKE=1 vitest run tests/livePlanningPlaybook.test.ts",
     "test:live-editing-playbook": "LIVE_EDITING_PLAYBOOK_SMOKE=1 vitest run tests/liveEditingPlaybook.test.ts",

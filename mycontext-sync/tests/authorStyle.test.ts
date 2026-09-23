@@ -1,12 +1,8 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  AUTHOR_STYLE_LOCAL_SOURCES,
-  loadAuthorStyleDocument,
+  AUTHOR_STYLE_DOCUMENTS,
   parseAuthorStyleMarkdown,
-  type AuthorStyleSource
+  type AuthorStyleDocumentDefinition
 } from "../src/authorStyle.js";
 import {
   buildAuthorStyleContext,
@@ -37,27 +33,26 @@ const TITLE_KEYS = [
 ];
 
 describe("author style semantic storage", () => {
-  it("keeps ore-body-style Notion-only and rejects the removed analysis outline", () => {
-    expect(AUTHOR_STYLE_LOCAL_SOURCES.map((source) => source.documentId)).toEqual([
-      "ore-title-style"
+  it("keeps both document definitions and rejects the removed analysis outline", () => {
+    expect(AUTHOR_STYLE_DOCUMENTS.map((source) => source.documentId)).toEqual([
+      "ore-title-style",
+      "ore-body-style"
     ]);
-    const source: AuthorStyleSource = {
-      documentId: "ore-body-style",
-      authorKey: "ore",
-      styleScope: "body",
-      relativePath: "unused.md"
-    };
     expect(() => parseAuthorStyleMarkdown({
-      source,
+      source: authorStyleDocument("body"),
       markdown: "# Old analysis\n\n## Executive Summary\n\nRemoved.\n",
       sourcePathKey: "notion:body-page",
       sourceMtimeMs: 0
     })).toThrow("ore-body-style H2 outline changed");
   });
 
-  it("parses all 19 title delivery units and ignores headings inside fences", async () => {
-    const { root, source } = await writeSource("title.md", titleMarkdown(), "title");
-    const document = await loadAuthorStyleDocument(root, source);
+  it("parses all 19 title delivery units and ignores headings inside fences", () => {
+    const document = parseAuthorStyleMarkdown({
+      source: authorStyleDocument("title"),
+      markdown: titleMarkdown(),
+      sourcePathKey: "notion:title-page",
+      sourceMtimeMs: 123
+    });
 
     expect(document.deliverySectionCount).toBe(19);
     expect(document.searchSpanCount).toBe(1);
@@ -68,14 +63,8 @@ describe("author style semantic storage", () => {
   });
 
   it("parses the current Notion body outline with the persisted routing contract", () => {
-    const source: AuthorStyleSource = {
-      documentId: "ore-body-style",
-      authorKey: "ore",
-      styleScope: "body",
-      relativePath: "knowledge/body.md"
-    };
     const document = parseAuthorStyleMarkdown({
-      source,
+      source: authorStyleDocument("body"),
       markdown: currentBodyMarkdown(),
       sourcePathKey: "notion:body-page",
       sourceMtimeMs: 123
@@ -116,14 +105,8 @@ describe("author style semantic storage", () => {
   });
 
   it("parses Notion-provided Markdown without requiring a local file", () => {
-    const source: AuthorStyleSource = {
-      documentId: "ore-title-style",
-      authorKey: "ore",
-      styleScope: "title",
-      relativePath: "knowledge/title.md"
-    };
     const document = parseAuthorStyleMarkdown({
-      source,
+      source: authorStyleDocument("title"),
       markdown: titleMarkdown(),
       sourcePathKey: "notion:page-1",
       sourceMtimeMs: 123
@@ -135,23 +118,12 @@ describe("author style semantic storage", () => {
   });
 });
 
-async function writeSource(
-  filename: string,
-  markdown: string,
-  styleScope: "title" | "body"
-): Promise<{ root: string; source: AuthorStyleSource }> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "author-style-"));
-  await fs.mkdir(path.join(root, "knowledge"));
-  await fs.writeFile(path.join(root, "knowledge", filename), markdown);
-  return {
-    root,
-    source: {
-      documentId: styleScope === "title" ? "ore-title-style" : "ore-body-style",
-      authorKey: "ore",
-      styleScope,
-      relativePath: `knowledge/${filename}`
-    }
-  };
+function authorStyleDocument(styleScope: "title" | "body"): AuthorStyleDocumentDefinition {
+  const source = AUTHOR_STYLE_DOCUMENTS.find((candidate) => candidate.styleScope === styleScope);
+  if (source === undefined) {
+    throw new Error(`missing ${styleScope} author style document definition`);
+  }
+  return source;
 }
 
 function titleMarkdown(): string {

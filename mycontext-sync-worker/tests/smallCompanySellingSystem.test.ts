@@ -20,6 +20,38 @@ describe("small-company-selling-system parser", () => {
     );
   });
 
+  it("does not treat an H1-shaped line inside a code fence as a page title", () => {
+    const body = [
+      "```markdown",
+      "# This is code, not the page title",
+      "```",
+      "本文"
+    ].join("\n");
+
+    expect(canonicalSmallCompanySellingSystemMarkdown(body)).toBe(
+      `${SMALL_COMPANY_SELLING_SYSTEM_SOURCE_H1}\n\n${body}\n`
+    );
+  });
+
+  it("keeps rejecting a real body H1 while respecting fence length and closure text", () => {
+    const fencedBody = [
+      "````markdown",
+      "# This is code, not the page title",
+      "```",
+      "# This is still code",
+      "```` not a closing fence",
+      "# This is still code too",
+      "````   ",
+      "本文"
+    ].join("\n");
+    expect(canonicalSmallCompanySellingSystemMarkdown(fencedBody)).toBe(
+      `${SMALL_COMPANY_SELLING_SYSTEM_SOURCE_H1}\n\n${fencedBody}\n`
+    );
+
+    expect(() => canonicalSmallCompanySellingSystemMarkdown("導入\n\n# 本文の実H1"))
+      .toThrow("Business Knowledge body contains an unexpected H1");
+  });
+
   it.runIf(fs.existsSync(productionSourcePath))(
     "parses the production transcription with the frozen semantic-section contract",
     () => {

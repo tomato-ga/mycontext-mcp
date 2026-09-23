@@ -205,7 +205,12 @@ function createEnvironment(): Env {
     GITHUB_ALLOWED_USER_ID: "1",
     OAUTH_KV: new MemoryKv() as unknown as KVNamespace,
     AUTH_KV: new MemoryKv() as unknown as KVNamespace,
-    OAUTH_PROVIDER: undefined as unknown as OAuthHelpers
+    OAUTH_PROVIDER: undefined as unknown as OAuthHelpers,
+    CF_VERSION_METADATA: {
+      id: "11111111-2222-4333-8444-555555555555",
+      tag: "test",
+      timestamp: "2026-08-13T00:00:00.000Z"
+    }
   };
 }
 
@@ -354,6 +359,13 @@ function discoverRequest({
   if (bearer !== null) {
     headers.set("authorization", `Bearer ${bearer}`);
   }
+  if (method === "OPTIONS") {
+    headers.set("access-control-request-method", "POST");
+    headers.set(
+      "access-control-request-headers",
+      "authorization, content-type, mcp-protocol-version, mcp-method, mcp-name"
+    );
+  }
   return new Request(SERVER_URL, {
     method,
     headers,
@@ -427,6 +439,180 @@ describe("MCP stable 2026-07-28 production HTTP entrypoint", () => {
     };
     expect(authorizationMetadata.scopes_supported).toContain(MCP_SCOPE);
     expect(authorizationMetadata.scopes_supported).toContain("offline_access");
+  });
+
+  it("exposes the executing Worker version on the read-only health endpoint", async () => {
+    const response = await productionFetch(new Request(`${PUBLIC_ORIGIN}/healthz`, {
+      headers: { host: SERVER_HOST }
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("ok");
+    expect(response.headers.get("x-worker-version-id"))
+      .toBe("11111111-2222-4333-8444-555555555555");
+  });
+
+  it("returns 400 for malformed authorization input and preserves 500 for KV failures", async () => {
+    const normalClient = await env.OAUTH_PROVIDER.createClient({
+      clientName: "Authorization flow test",
+      redirectUris: [CLIENT_REDIRECT_URI],
+      tokenEndpointAuthMethod: "none"
+    });
+    const invalidRequests = [
+      new URLSearchParams({
+        response_type: "code",
+        client_id: normalClient.clientId,
+        redirect_uri: CLIENT_REDIRECT_URI,
+        scope: MCP_SCOPE,
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: "not-an-absolute-uri"
+      }),
+      new URLSearchParams({
+        response_type: "code",
+        client_id: normalClient.clientId,
+        redirect_uri: "javascript:alert(1)",
+        scope: MCP_SCOPE,
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: MCP_RESOURCE
+      }),
+      new URLSearchParams({
+        response_type: "code",
+        client_id: normalClient.clientId,
+        redirect_uri: CLIENT_REDIRECT_URI,
+        scope: "admin",
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: MCP_RESOURCE
+      }),
+      new URLSearchParams({
+        response_type: "code",
+        client_id: "client-not-registered",
+        redirect_uri: CLIENT_REDIRECT_URI,
+        scope: MCP_SCOPE,
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: MCP_RESOURCE
+      }),
+      new URLSearchParams({
+        response_type: "code",
+        client_id: normalClient.clientId,
+        redirect_uri: "https://another-client.example/callback",
+        scope: MCP_SCOPE,
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: MCP_RESOURCE
+      }),
+      new URLSearchParams({
+        response_type: "token",
+        client_id: normalClient.clientId,
+        redirect_uri: CLIENT_REDIRECT_URI,
+        scope: MCP_SCOPE,
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: MCP_RESOURCE
+      }),
+      new URLSearchParams({
+        response_type: "code",
+        client_id: normalClient.clientId,
+        redirect_uri: CLIENT_REDIRECT_URI,
+        scope: MCP_SCOPE,
+        state: "authorization-state",
+        code_challenge: "challenge",
+        code_challenge_method: "plain",
+        resource: MCP_RESOURCE
+      })
+    ];
+    for (const parameters of invalidRequests) {
+      const response = await productionFetch(new Request(
+        `${PUBLIC_ORIGIN}/authorize?${parameters.toString()}`,
+        { headers: { host: SERVER_HOST } }
+      ));
+      expect(
+        response.status,
+        parameters.get("resource")
+          ?? parameters.get("redirect_uri")
+          ?? parameters.get("scope")
+          ?? "unknown"
+      ).toBe(400);
+    }
+
+    const normalParameters = new URLSearchParams({
+      response_type: "code",
+      client_id: normalClient.clientId,
+      redirect_uri: CLIENT_REDIRECT_URI,
+      scope: MCP_SCOPE,
+      state: "authorization-state",
+      code_challenge: "challenge",
+      code_challenge_method: "S256",
+      resource: MCP_RESOURCE
+    });
+    const normalResponse = await productionFetch(new Request(
+      `${PUBLIC_ORIGIN}/authorize?${normalParameters.toString()}`,
+      { headers: { host: SERVER_HOST } }
+    ));
+    expect(normalResponse.status).toBe(200);
+    await expect(normalResponse.clone().text()).resolves.toContain("Connect");
+
+    const normalCookie = normalResponse.headers.get("set-cookie");
+    const normalCsrf = normalCookie?.match(/__Host-mycontext_oauth_csrf=([^;]+)/)?.[1];
+    expect(normalCsrf).toBeDefined();
+    const normalPost = await productionFetch(new Request(
+      `${PUBLIC_ORIGIN}/authorize?${normalParameters.toString()}`,
+      {
+        method: "POST",
+        headers: {
+          host: SERVER_HOST,
+          cookie: `__Host-mycontext_oauth_csrf=${normalCsrf ?? ""}`,
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({ csrf_token: normalCsrf ?? "" })
+      }
+    ));
+    expect(normalPost.status).toBe(200);
+    await expect(normalPost.text()).resolves.toContain("Open GitHub authorization");
+
+    const invalidScopePage = await productionFetch(new Request(
+      `${PUBLIC_ORIGIN}/authorize?${normalParameters.toString()}`,
+      { headers: { host: SERVER_HOST } }
+    ));
+    const invalidScopeCookie = invalidScopePage.headers.get("set-cookie");
+    const invalidScopeCsrf = invalidScopeCookie?.match(/__Host-mycontext_oauth_csrf=([^;]+)/)?.[1];
+    expect(invalidScopeCsrf).toBeDefined();
+    const invalidScopeParameters = new URLSearchParams(normalParameters);
+    invalidScopeParameters.set("scope", "admin");
+    const invalidScopePost = await productionFetch(new Request(
+      `${PUBLIC_ORIGIN}/authorize?${invalidScopeParameters.toString()}`,
+      {
+        method: "POST",
+        headers: {
+          host: SERVER_HOST,
+          cookie: `__Host-mycontext_oauth_csrf=${invalidScopeCsrf ?? ""}`,
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({ csrf_token: invalidScopeCsrf ?? "" })
+      }
+    ));
+    expect(invalidScopePost.status).toBe(400);
+
+    const brokenEnv = createEnvironment();
+    brokenEnv.OAUTH_KV = {
+      async get() {
+        throw new Error("KV unavailable");
+      }
+    } as unknown as KVNamespace;
+    const brokenResponse = await worker.fetch(new Request(
+      `${PUBLIC_ORIGIN}/authorize?${normalParameters.toString()}`,
+      { headers: { host: SERVER_HOST } }
+    ), brokenEnv, createExecutionContext());
+    expect(brokenResponse.status).toBe(500);
+    await expect(brokenResponse.json()).resolves.toEqual({ error: "authorization_failed" });
   });
 
   it("serves authorized 2026-07-28 traffic through OAuthProvider", async () => {
@@ -518,7 +704,7 @@ describe("MCP stable 2026-07-28 production HTTP entrypoint", () => {
     await client.close();
   });
 
-  it("rejects invalid Host and Origin before the OAuth challenge", async () => {
+  it("rejects invalid Host but accepts every well-formed client Origin", async () => {
     for (const method of ["POST", "OPTIONS"] as const) {
       const missingHost = await productionFetch(discoverRequest({
         method,
@@ -533,31 +719,78 @@ describe("MCP stable 2026-07-28 production HTTP entrypoint", () => {
         bearer: null
       }));
       expect(invalidHost.status).toBe(403);
-
-      const invalidOrigin = await productionFetch(discoverRequest({
-        method,
-        origin: "https://invalid.example",
-        bearer: null
-      }));
-      expect(invalidOrigin.status).toBe(403);
-      expect(invalidOrigin.headers.get("x-content-type-options")).toBe("nosniff");
     }
 
-    const validOrigin = await productionFetch(discoverRequest({
-      origin: PUBLIC_ORIGIN,
-      bearer: null
-    }));
-    expect(validOrigin.status).toBe(401);
-    expect(validOrigin.headers.get("www-authenticate")).toContain(
-      `${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource${MCP_ROUTE}`
-    );
+    for (const origin of [
+      PUBLIC_ORIGIN,
+      "https://chatgpt.com",
+      "https://chat.openai.com",
+      "https://arbitrary-mcp-client.example"
+    ]) {
+      const acceptedOrigin = await productionFetch(discoverRequest({
+        origin,
+        bearer: null
+      }));
+      expect(acceptedOrigin.status).toBe(401);
+      expect(acceptedOrigin.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(acceptedOrigin.headers.get("www-authenticate")).toContain(
+        `${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource${MCP_ROUTE}`
+      );
 
-    const validPreflight = await productionFetch(discoverRequest({
-      method: "OPTIONS",
-      origin: PUBLIC_ORIGIN,
-      bearer: null
+      const acceptedPreflight = await productionFetch(discoverRequest({
+        method: "OPTIONS",
+        origin,
+        bearer: null
+      }));
+      expect(acceptedPreflight.status).toBe(204);
+      expect(acceptedPreflight.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(acceptedPreflight.headers.get("access-control-allow-methods")).toContain("POST");
+      const allowedHeaders = acceptedPreflight.headers
+        .get("access-control-allow-headers")
+        ?.toLowerCase() ?? "";
+      for (const header of [
+        "authorization",
+        "content-type",
+        "mcp-protocol-version",
+        "mcp-method",
+        "mcp-name"
+      ]) {
+        expect(allowedHeaders).toContain(header);
+      }
+    }
+
+    const authorizedChatGptOrigin = await productionFetch(discoverRequest({
+      origin: "https://chatgpt.com"
     }));
-    expect(validPreflight.status).toBe(204);
+    expect(authorizedChatGptOrigin.status).toBe(200);
+    expect(authorizedChatGptOrigin.headers.get("access-control-allow-origin"))
+      .toBe("https://chatgpt.com");
+    await expect(authorizedChatGptOrigin.json()).resolves.toMatchObject({
+      result: {
+        supportedVersions: [MODERN_PROTOCOL_VERSION],
+        resultType: "complete"
+      }
+    });
+
+    for (const origin of [
+      "null",
+      "ftp://invalid.example",
+      "https://invalid.example/path",
+      "https://user@invalid.example",
+      "https://invalid.example?query=1",
+      "https://invalid.example#fragment"
+    ]) {
+      const malformedOrigin = await productionFetch(discoverRequest({
+        origin,
+        bearer: null
+      }));
+      expect(malformedOrigin.status).toBe(403);
+      expect(malformedOrigin.headers.get("x-content-type-options")).toBe("nosniff");
+      await expect(malformedOrigin.json()).resolves.toMatchObject({
+        jsonrpc: "2.0",
+        id: null
+      });
+    }
   });
 
   it("rejects missing, invalid, and wrong-audience bearer tokens", async () => {

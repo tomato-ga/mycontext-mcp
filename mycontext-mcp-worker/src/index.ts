@@ -2,7 +2,6 @@ import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import {
   hostHeaderValidationResponse,
   localhostAllowedHostnames,
-  localhostAllowedOrigins,
   McpServer,
   originValidationResponse
 } from "@modelcontextprotocol/server";
@@ -56,7 +55,10 @@ const apiHandler = {
     const response = await createMcpHandler(() => createServer(config), {
       route: MCP_ROUTE,
       responseMode: "json",
-      legacy: "stateless"
+      legacy: "stateless",
+      // Origin syntax is validated by mcpEndpointValidationResponse. OAuth,
+      // rather than a browser-origin allowlist, is the access-control boundary.
+      allowedOriginHostnames: "*"
     })(request, env, ctx);
     const finalResponse = withSecurityHeaders(
       await withOpenAiToolDescriptors(response, inspection.includesToolsList)
@@ -105,10 +107,58 @@ const allowedMcpHostnames = [
   ...localhostAllowedHostnames(),
   publicHostname
 ];
-const allowedMcpOriginHostnames = [
-  ...localhostAllowedOrigins(),
-  publicHostname
-];
+
+function originSyntaxValidationResponse(request: Request): Response | undefined {
+  const origin = request.headers.get("origin");
+  if (origin === null || origin === "") {
+    return undefined;
+  }
+
+  let parsedOrigin: URL | undefined;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    // The SDK helper below returns the protocol-compliant JSON-RPC 403 shape.
+  }
+
+  const isCanonicalHttpOrigin = parsedOrigin !== undefined
+    && (parsedOrigin.protocol === "https:" || parsedOrigin.protocol === "http:")
+    && parsedOrigin.hostname !== ""
+    && parsedOrigin.origin === origin;
+
+  return originValidationResponse(
+    request,
+    isCanonicalHttpOrigin && parsedOrigin !== undefined ? [parsedOrigin.hostname] : []
+  );
+}
+
+function withMcpCorsHeaders(request: Request, response: Response): Response {
+  if (new URL(request.url).pathname !== MCP_ROUTE) {
+    return response;
+  }
+  const origin = request.headers.get("origin");
+  if (origin === null || origin === "") {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set("access-control-allow-origin", origin);
+  headers.set("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
+  headers.set(
+    "access-control-allow-headers",
+    "Authorization, Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Mcp-Method, Mcp-Name, Last-Event-ID, X-OpenAI-Session"
+  );
+  headers.set("access-control-expose-headers", "Mcp-Session-Id, WWW-Authenticate");
+  const vary = headers.get("vary");
+  if (vary === null || !vary.split(",").some((value) => value.trim().toLowerCase() === "origin")) {
+    headers.set("vary", vary === null ? "Origin" : `${vary}, Origin`);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
 
 function mcpEndpointValidationResponse(request: Request): Response | undefined {
   if (new URL(request.url).pathname !== MCP_ROUTE) {
@@ -116,7 +166,7 @@ function mcpEndpointValidationResponse(request: Request): Response | undefined {
   }
 
   return hostHeaderValidationResponse(request, allowedMcpHostnames)
-    ?? originValidationResponse(request, allowedMcpOriginHostnames);
+    ?? originSyntaxValidationResponse(request);
 }
 
 export default {
@@ -125,7 +175,9 @@ export default {
     if (validationResponse !== undefined) {
       return withSecurityHeaders(validationResponse);
     }
-    return withSecurityHeaders(await oauthProvider.fetch(request, env, ctx));
+    return withSecurityHeaders(
+      withMcpCorsHeaders(request, await oauthProvider.fetch(request, env, ctx))
+    );
   },
 
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {

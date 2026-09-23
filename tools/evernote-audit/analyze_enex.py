@@ -583,7 +583,10 @@ def collect_enex_files(inputs: list[Path]) -> list[Path]:
     files: list[Path] = []
     for item in inputs:
         if item.is_dir():
-            files.extend(sorted(item.rglob("*.enex")))
+            files.extend(
+                path for path in item.rglob("*")
+                if path.is_file() and path.suffix.lower() == ".enex"
+            )
         elif item.is_file() and item.suffix.lower() == ".enex":
             files.append(item)
         else:

@@ -48,12 +48,21 @@ export async function handleNotionWebhook(
   if (pageId === null) {
     return json({ ok: false, error: "webhook page id is missing" }, 400);
   }
-  await env.SYNC_QUEUE.send({
-    eventId: typeof payload.id === "string" ? payload.id : crypto.randomUUID(),
-    eventType: eventType as SyncMessage["eventType"],
-    pageId,
-    timestamp: typeof payload.timestamp === "string" ? payload.timestamp : new Date().toISOString()
-  });
+  try {
+    await env.SYNC_QUEUE.send({
+      eventId: typeof payload.id === "string" ? payload.id : crypto.randomUUID(),
+      eventType: eventType as SyncMessage["eventType"],
+      pageId,
+      timestamp: typeof payload.timestamp === "string" ? payload.timestamp : new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "notion_webhook_queue_failed",
+      pageId,
+      error: error instanceof Error ? error.message : String(error)
+    }));
+    return json({ ok: false, error: "queue temporarily unavailable" }, 503);
+  }
   return json({ ok: true, queued: true }, 202);
 }
 

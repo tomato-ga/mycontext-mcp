@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { parseEditorKnowledgeSectionedMarkdown } from "../src/editorKnowledge.js";
 import {
-  loadEditorKnowledgeSectionedDocument,
-  parseEditorKnowledgeSectionedMarkdown
-} from "../src/editorKnowledge.js";
-import {
-  writeKikakuCatalogFixture,
-  writeKikakuFulltextFixture,
-  writeKikakuPlaybookFixture,
-  writeKikakuSourceFixture
+  createKikakuCatalogFixture,
+  createKikakuFulltextFixture,
+  createKikakuPlaybookFixture,
+  createKikakuSourceFixture
 } from "./fixtures/editorKnowledgeSectionedFixture.js";
 
 describe("parseEditorKnowledgeSectionedMarkdown (text-based, used by mycontext-sync-worker)", () => {
@@ -100,18 +97,18 @@ describe("parseEditorKnowledgeSectionedMarkdown (text-based, used by mycontext-s
     expect(document.markdown).toBe(markdown);
   });
 
-  it("produces the exact same result as the file-based loader for identical content", async () => {
-    const fixture = await writeKikakuCatalogFixture();
-    const fromFile = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
-    const fromText = parseEditorKnowledgeSectionedMarkdown({
-      documentId: fixture.source.documentId,
-      markdown: fixture.markdown,
-      sourcePathKey: fixture.source.relativePath
+  it("parses fixture Markdown directly while preserving its supplied source key", () => {
+    const fixture = createKikakuCatalogFixture();
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
+    expect(document).toMatchObject({
+      documentId: "kikaku-db-catalog",
+      sourcePathKey: fixture.sourcePathKey,
+      sectionCount: 6,
+      searchSpanCount: 4
     });
-    expect(fromText).toEqual(fromFile);
   });
 
-  it("rejects empty or NUL-containing Markdown, mirroring the file-based loader's guard", () => {
+  it("rejects empty or NUL-containing Markdown", () => {
     expect(() => parseEditorKnowledgeSectionedMarkdown({
       documentId: "kikaku-db-catalog",
       markdown: "   ",
@@ -121,9 +118,9 @@ describe("parseEditorKnowledgeSectionedMarkdown (text-based, used by mycontext-s
 });
 
 describe("kikaku composition playbook parsing (editor knowledge, sectioned)", () => {
-  it("treats each numbered ## chapter as one atomic, self-delivering detail section", async () => {
-    const fixture = await writeKikakuPlaybookFixture();
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+  it("treats each numbered ## chapter as one atomic, self-delivering detail section", () => {
+    const fixture = createKikakuPlaybookFixture();
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
 
     expect(document.sectionCount).toBe(3);
     expect(document.searchSpanCount).toBe(3);
@@ -146,31 +143,31 @@ describe("kikaku composition playbook parsing (editor knowledge, sectioned)", ()
     expect(first?.sectionMarkdown).toContain("### 補足メモ");
   });
 
-  it("rejects a source with no ## chapter headings", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects a source with no ## chapter headings", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-composition-playbook",
       "# 空のプレイブック\n\n本文のみ、章見出しなし。\n"
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_playbook_no_chapters" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_playbook_no_chapters" })
+    );
   });
 
-  it("rejects non-sequential chapter numbering", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects non-sequential chapter numbering", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-composition-playbook",
       "# プレイブック\n\n## 1. 導入\n本文\n\n## 3. 飛び番\n本文\n"
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "business_knowledge_heading_sequence_mismatch" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "business_knowledge_heading_sequence_mismatch" })
+    );
   });
 });
 
 describe("kikaku db catalog parsing (editor knowledge, sectioned)", () => {
-  it("splits groups into an index layer and entries into a searchable detail layer", async () => {
-    const fixture = await writeKikakuCatalogFixture();
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+  it("splits groups into an index layer and entries into a searchable detail layer", () => {
+    const fixture = createKikakuCatalogFixture();
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
 
     expect(document.sectionCount).toBe(6);
     expect(document.searchSpanCount).toBe(4);
@@ -207,18 +204,18 @@ describe("kikaku db catalog parsing (editor knowledge, sectioned)", () => {
     expect(unnumbered).toMatchObject({ sectionNumber: null, contentLayer: "detail", isSearchable: true });
   });
 
-  it("rejects a source with zero ### entries", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects a source with zero ### entries", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       "# 空のカタログ\n\n## グループのみ\nエントリなし。\n"
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_catalog_no_entries" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_catalog_no_entries" })
+    );
   });
 
-  it("rejects a duplicate No. across entries", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects a duplicate No. across entries", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       [
         "# 重複カタログ",
@@ -232,13 +229,13 @@ describe("kikaku db catalog parsing (editor knowledge, sectioned)", () => {
         ""
       ].join("\n")
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "duplicate_business_knowledge_section_id" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "duplicate_business_knowledge_section_id" })
+    );
   });
 
-  it("rejects an entry heading that appears before any group heading", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects an entry heading that appears before any group heading", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       [
         "# 階層違反カタログ",
@@ -252,13 +249,13 @@ describe("kikaku db catalog parsing (editor knowledge, sectioned)", () => {
         ""
       ].join("\n")
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_catalog_orphan_entry" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_catalog_orphan_entry" })
+    );
   });
 
-  it("rejects entries with no ## group heading anywhere in the document", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects entries with no ## group heading anywhere in the document", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       [
         "# グループなしカタログ",
@@ -271,23 +268,23 @@ describe("kikaku db catalog parsing (editor knowledge, sectioned)", () => {
         ""
       ].join("\n")
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_catalog_orphan_entry" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_catalog_orphan_entry" })
+    );
   });
 
-  it("rejects a document with no ## or ### headings at all", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects a document with no ## or ### headings at all", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       "# 見出しが一切ないカタログ\n\n本文だけがある。\n"
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_catalog_no_entries" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_catalog_no_entries" })
+    );
   });
 
-  it("rejects a heading level deeper than ### inside the catalog", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects a heading level deeper than ### inside the catalog", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       [
         "# 深すぎる見出しカタログ",
@@ -299,29 +296,29 @@ describe("kikaku db catalog parsing (editor knowledge, sectioned)", () => {
         ""
       ].join("\n")
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_catalog_heading_level_invalid" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_catalog_heading_level_invalid" })
+    );
   });
 
-  it("rejects more than 10 group headings", async () => {
+  it("rejects more than 10 group headings", () => {
     const groups = Array.from({ length: 11 }, (_, index) => {
       return [`## グループ${index + 1}`, `### No.${index + 1} ｜ エントリ${index + 1}`, "本文", ""].join("\n");
     }).join("\n");
-    const fixture = await writeKikakuSourceFixture(
+    const fixture = createKikakuSourceFixture(
       "kikaku-db-catalog",
       `# 群が多すぎるカタログ\n\n${groups}`
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "kikaku_catalog_too_many_groups" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "kikaku_catalog_too_many_groups" })
+    );
   });
 });
 
 describe("kikaku fulltext parsing (editor knowledge, sectioned)", () => {
-  it("splits a preamble, numbered entries, and a no-number entry, keeping the source verbatim", async () => {
-    const fixture = await writeKikakuFulltextFixture();
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+  it("splits a preamble, numbered entries, and a no-number entry, keeping the source verbatim", () => {
+    const fixture = createKikakuFulltextFixture();
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
 
     expect(document.sectionCount).toBe(4);
     expect(document.searchSpanCount).toBe(3);
@@ -357,7 +354,7 @@ describe("kikaku fulltext parsing (editor knowledge, sectioned)", () => {
     expect(unnumbered).toMatchObject({ sectionNumber: null, contentLayer: "detail", isSearchable: true });
   });
 
-  it("does not treat unpatterned headings of any level, or a fenced entry-shaped line, as boundaries", async () => {
+  it("does not treat unpatterned headings of any level, or a fenced entry-shaped line, as boundaries", () => {
     const markdown = [
       "# 見出しノイズ入り全文集",
       "前書き行。",
@@ -383,8 +380,8 @@ describe("kikaku fulltext parsing (editor knowledge, sectioned)", () => {
       "本文2。",
       ""
     ].join("\n");
-    const fixture = await writeKikakuSourceFixture("kikaku-fulltext-1", markdown);
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+    const fixture = createKikakuSourceFixture("kikaku-fulltext-1", markdown);
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
 
     expect(document.sections.map((section) => section.sectionId)).toEqual([
       "preamble",
@@ -398,8 +395,8 @@ describe("kikaku fulltext parsing (editor knowledge, sectioned)", () => {
     expect(first?.sectionMarkdown).toContain("## No.9 ｜ dummy");
   });
 
-  it("rejects a duplicate No. across entries", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("rejects a duplicate No. across entries", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-fulltext-1",
       [
         "# 重複全文集",
@@ -412,48 +409,48 @@ describe("kikaku fulltext parsing (editor knowledge, sectioned)", () => {
         ""
       ].join("\n")
     );
-    await expect(
-      loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source)
-    ).rejects.toMatchObject({ code: "duplicate_business_knowledge_section_id" });
+    expect(() => parseEditorKnowledgeSectionedMarkdown(fixture)).toThrow(
+      expect.objectContaining({ code: "duplicate_business_knowledge_section_id" })
+    );
   });
 
-  it("does not error on zero entries", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("does not error on zero entries", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-fulltext-1",
       "# エントリなし全文集\n\n見出しのないただの本文。\n"
     );
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
     expect(document.sectionCount).toBe(1);
     expect(document.sections[0]).toMatchObject({ sectionId: "preamble", isSearchable: false });
   });
 
-  it("produces no preamble section when the first entry immediately follows the title", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("produces no preamble section when the first entry immediately follows the title", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-fulltext-1",
       ["# 前書きなし全文集", "", "## No.1 ｜ 一つ目", "本文", ""].join("\n")
     );
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
     expect(document.sectionCount).toBe(1);
     expect(document.sections[0]).toMatchObject({ sectionId: "no-001" });
   });
 
-  it("keeps a body-less entry (heading line only) as a single-line section", async () => {
-    const fixture = await writeKikakuSourceFixture(
+  it("keeps a body-less entry (heading line only) as a single-line section", () => {
+    const fixture = createKikakuSourceFixture(
       "kikaku-fulltext-1",
       ["# 空エントリ全文集", "", "## No.1 ｜ 本文なし", "## No.2 ｜ 次のエントリ", "本文2。", ""].join("\n")
     );
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
     const first = document.sections.find((section) => section.sectionId === "no-001");
     expect(first?.sectionMarkdown).toBe("## No.1 ｜ 本文なし");
   });
 
-  it("accepts an entry approaching 70KB without hitting the storage guard", async () => {
+  it("accepts an entry approaching 70KB without hitting the storage guard", () => {
     const longBody = "本文の一行。".repeat(7000); // well over 70,000 bytes in UTF-8
-    const fixture = await writeKikakuSourceFixture(
+    const fixture = createKikakuSourceFixture(
       "kikaku-fulltext-1",
       ["# 長文全文集", "", "## No.1 ｜ 長い企画", longBody, "", "## No.2 ｜ 次の企画", "本文2。", ""].join("\n")
     );
-    const document = await loadEditorKnowledgeSectionedDocument(fixture.root, fixture.source);
+    const document = parseEditorKnowledgeSectionedMarkdown(fixture);
     const first = document.sections.find((section) => section.sectionId === "no-001");
     expect(Buffer.byteLength(first?.sectionMarkdown ?? "", "utf8")).toBeGreaterThan(70_000);
   });

@@ -38,18 +38,9 @@ export const EDITOR_KNOWLEDGE_SOURCES: readonly EditorKnowledgeSource[] = [
 ];
 
 /**
- * kikaku-composition-playbook, henshu-editing-playbook, kikaku-db-catalog,
- * knowhow-media-design, and the kikaku-fulltext-* family are Editor Knowledge documents
- * (not Business Knowledge). Most use the "document + section table + search span" shape that
- * Business Knowledge already has. The two compact playbooks
- * (henshu-editing-playbook and knowhow-media-design) intentionally stay as one whole-document
- * record and do not create editor_knowledge_sections rows.
- * They are kept in a separate source list from EDITOR_KNOWLEDGE_SOURCES (which stays a fixed
- * 8-document, non-sectioned allowlist) and are loaded through
- * loadEditorKnowledgeSectionedDocument below, which reuses the Business Knowledge
- * parsers/validators unchanged. kikaku-fulltext-* is an open-ended family (one document per
- * split of the full-text collection) rather than a single fixed ID, so it is modeled as a
- * template literal type instead of a literal alternative.
+ * IDs accepted by the text-based Editor Knowledge section parser. These documents are
+ * Notion-managed; kikaku-fulltext-* is an open-ended family, so it is modeled as a template
+ * literal type rather than a literal alternative.
  */
 export type EditorKnowledgeSectionedDocumentId =
   | "kikaku-composition-playbook"
@@ -57,24 +48,6 @@ export type EditorKnowledgeSectionedDocumentId =
   | "kikaku-db-catalog"
   | "knowhow-media-design"
   | `kikaku-fulltext-${string}`;
-
-export interface EditorKnowledgeSectionedSource {
-  documentId: EditorKnowledgeSectionedDocumentId;
-  relativePath: string;
-}
-
-/**
- * Empty: kikaku-composition-playbook and kikaku-db-catalog are no longer synced from local
- * files. Per the "every document syncs through the Notion MyContext Documents database" rule,
- * they are Notion-managed pages with Category "Editor Knowledge", synced by
- * mycontext-sync-worker via parseEditorKnowledgeSectionedMarkdown below (the same pattern
- * Author Style already uses: mycontext-sync-worker imports the parser directly rather than
- * this package's file-loading CLI path). This list, and loadEditorKnowledgeSectionedDocument,
- * are kept only as reusable local-testing infrastructure over the same parsers/section
- * generation/TiDB schema — pull-editor-knowledge and doctor-editor-knowledge simply iterate
- * zero sectioned sources now.
- */
-export const EDITOR_KNOWLEDGE_SECTIONED_SOURCES: readonly EditorKnowledgeSectionedSource[] = [];
 
 export function isEditorKnowledgeSectionedDocumentId(
   value: string
@@ -157,7 +130,13 @@ async function readEditorKnowledgeSourceFile(
 ): Promise<{ markdown: string; bytes: Buffer }> {
   const absoluteRoot = path.resolve(sourceRoot);
   const sourcePath = path.resolve(absoluteRoot, source.relativePath);
-  if (!sourcePath.startsWith(`${absoluteRoot}${path.sep}`)) {
+  const relative = path.relative(absoluteRoot, sourcePath);
+  if (
+    relative === ""
+    || relative === ".."
+    || relative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relative)
+  ) {
     throw new AppError(
       "editor_knowledge_path_escape",
       `source path escapes configured root for ${source.documentId}`,
@@ -221,11 +200,8 @@ export interface EditorKnowledgeSectionedMarkdownInput {
 }
 
 /**
- * Core text-based parser: takes already-fetched Markdown directly (no file I/O), so it works
- * equally for a local file's contents (see loadEditorKnowledgeSectionedDocument below, a thin
- * wrapper around this) and for Markdown fetched from a Notion page by mycontext-sync-worker
- * (see sync.ts's defaultParseEditorKnowledge, which mirrors authorStyle.ts's
- * parseAuthorStyleMarkdown / loadAuthorStyleDocument split exactly).
+ * Core text-based parser: takes already-fetched Markdown directly (no file I/O). The Notion
+ * sync worker uses this parser for Markdown fetched from MyContext Documents.
  */
 export function parseEditorKnowledgeSectionedMarkdown(
   input: EditorKnowledgeSectionedMarkdownInput
@@ -294,18 +270,6 @@ export function parseEditorKnowledgeSectionedMarkdown(
     searchSpanCount,
     sections
   };
-}
-
-export async function loadEditorKnowledgeSectionedDocument(
-  sourceRoot: string,
-  source: EditorKnowledgeSectionedSource
-): Promise<LoadedEditorKnowledgeSectionedDocument> {
-  const { markdown } = await readEditorKnowledgeSourceFile(sourceRoot, source);
-  return parseEditorKnowledgeSectionedMarkdown({
-    documentId: source.documentId,
-    markdown,
-    sourcePathKey: source.relativePath
-  });
 }
 
 function extractMarkdownTitle(markdown: string, documentId: string): string {

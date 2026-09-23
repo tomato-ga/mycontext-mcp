@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { sha256 } from "./hash.js";
 import { parseAuthorStyleRoutingManifest } from "./authorStyleRouting.js";
 import { AppError } from "./types.js";
@@ -21,10 +19,6 @@ export interface AuthorStyleDocumentDefinition {
   documentId: AuthorStyleDocumentId;
   authorKey: "ore";
   styleScope: AuthorStyleScope;
-}
-
-export interface AuthorStyleSource extends AuthorStyleDocumentDefinition {
-  relativePath: string;
 }
 
 export interface AuthorStyleSection {
@@ -114,15 +108,6 @@ export const AUTHOR_STYLE_DOCUMENTS: readonly AuthorStyleDocumentDefinition[] = 
   }
 ];
 
-export const AUTHOR_STYLE_LOCAL_SOURCES: readonly AuthorStyleSource[] = [
-  {
-    documentId: "ore-title-style",
-    authorKey: "ore",
-    styleScope: "title",
-    relativePath: "knowledge/ore-title-reproduction-guide.md"
-  }
-];
-
 const TITLE_MODE_KEYS = {
   news: ["ore-title/mode/news"],
   "reaction-explanation": ["ore-title/mode/reaction-explanation"],
@@ -141,71 +126,6 @@ const BODY_MODE_KEYS = {
   interview: ["ore-body/composition/interview"],
   translation: ["ore-body/composition/translation"]
 } as const;
-
-export function authorStyleSourceRootFromEnv(): string {
-  const sourceRoot = process.env.AUTHOR_STYLE_SOURCE_ROOT;
-  if (!sourceRoot) {
-    throw new AppError("missing_env", "missing required env var: AUTHOR_STYLE_SOURCE_ROOT", 3);
-  }
-  if (!path.isAbsolute(sourceRoot)) {
-    throw new AppError(
-      "invalid_author_style_source_root",
-      "AUTHOR_STYLE_SOURCE_ROOT must be an absolute path",
-      3
-    );
-  }
-  return path.resolve(sourceRoot);
-}
-
-export async function loadAuthorStyleDocument(
-  sourceRoot: string,
-  source: AuthorStyleSource
-): Promise<LoadedAuthorStyleDocument> {
-  const absoluteRoot = path.resolve(sourceRoot);
-  const sourcePath = path.resolve(absoluteRoot, source.relativePath);
-  const relative = path.relative(absoluteRoot, sourcePath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new AppError(
-      "author_style_path_escape",
-      `source path escapes configured root for ${source.documentId}`,
-      3
-    );
-  }
-
-  let bytes: Buffer;
-  let stat: Awaited<ReturnType<typeof fs.stat>>;
-  try {
-    [bytes, stat] = await Promise.all([fs.readFile(sourcePath), fs.stat(sourcePath)]);
-  } catch (error) {
-    throw new AppError(
-      "author_style_read_failed",
-      `failed to read author style source: ${source.documentId}`,
-      3,
-      error
-    );
-  }
-
-  let markdown: string;
-  try {
-    markdown = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false })
-      .decode(bytes)
-      .replace(/^\uFEFF/, "");
-  } catch (error) {
-    throw new AppError(
-      "author_style_invalid_utf8",
-      `author style source is not valid UTF-8: ${source.documentId}`,
-      3,
-      error
-    );
-  }
-  return parseAuthorStyleMarkdown({
-    source,
-    markdown,
-    sourcePathKey: source.relativePath,
-    sourceMtimeMs: Math.trunc(stat.mtimeMs),
-    sourceBytes: bytes.byteLength
-  });
-}
 
 export function parseAuthorStyleMarkdown(
   input: AuthorStyleMarkdownInput
