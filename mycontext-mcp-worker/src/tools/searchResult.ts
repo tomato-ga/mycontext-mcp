@@ -1,5 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { SearchContextHit } from "../tidb.js";
+import { buildTextToolResult } from "./textResult.js";
 
 const MAX_SNIPPET_LENGTH = 600;
 
@@ -56,10 +57,7 @@ export function buildSearchToolResult(hits: SearchContextHit[]): CallToolResult 
               ])
         ].join("\n"))
       ].join("\n\n");
-  return {
-    content: [{ type: "text", text }],
-    structuredContent: output
-  };
+  return buildTextToolResult(text, output);
 }
 
 export function excerpt(text: string, matchPosition: number, maxLength: number): string {

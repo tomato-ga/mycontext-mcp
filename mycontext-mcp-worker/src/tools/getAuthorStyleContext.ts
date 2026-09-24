@@ -14,6 +14,7 @@ import {
 } from "../authorStyle.js";
 import { MCP_SCOPE } from "../constants.js";
 import { getAuthorStyleContext, type TidbClient } from "../tidb.js";
+import { buildTextToolResult } from "./textResult.js";
 
 const allOperations = [...new Set([...TITLE_OPERATIONS, ...BODY_OPERATIONS])] as [
   string,
@@ -68,10 +69,7 @@ export function registerGetAuthorStyleContextTool(
           };
         }
         const { markdown: _markdown, ...metadata } = context;
-        return {
-          content: [{ type: "text" as const, text: context.markdown }],
-          structuredContent: metadata
-        };
+        return buildTextToolResult(context.markdown, metadata);
       } catch (error) {
         if (error instanceof AuthorStyleRoutingError || error instanceof AuthorStyleContextTooLargeError) {
           return {

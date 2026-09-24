@@ -8,6 +8,7 @@ import {
   SkillContextDataError
 } from "../skillContext.js";
 import type { TidbClient } from "../tidb.js";
+import { buildTextToolResult } from "./textResult.js";
 
 const inputSchema = z.object({
   skillId: z
@@ -52,14 +53,11 @@ export function registerGetAnalysisSkillContextTool(
           };
         }
         const { markdown: _markdown, ...metadata } = context;
-        return {
-          content: [{ type: "text" as const, text: context.markdown }],
-          structuredContent: {
-            ...metadata,
-            retrieval_mode: "full_skill_and_reference",
-            truncated: false
-          }
-        };
+        return buildTextToolResult(context.markdown, {
+          ...metadata,
+          retrieval_mode: "full_skill_and_reference",
+          truncated: false
+        });
       } catch (error) {
         if (error instanceof SkillContextDataError) {
           return {

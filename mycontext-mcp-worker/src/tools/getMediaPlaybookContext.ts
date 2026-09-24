@@ -6,6 +6,7 @@ import {
   MediaPlaybookContextTooLargeError
 } from "../mediaPlaybook.js";
 import { getMediaPlaybookContext, type TidbClient } from "../tidb.js";
+import { buildTextToolResult } from "./textResult.js";
 
 export function registerGetMediaPlaybookContextTool(
   server: McpServer,
@@ -39,10 +40,7 @@ export function registerGetMediaPlaybookContextTool(
           };
         }
         const { markdown: _markdown, ...metadata } = context;
-        return {
-          content: [{ type: "text" as const, text: context.markdown }],
-          structuredContent: metadata
-        };
+        return buildTextToolResult(context.markdown, metadata);
       } catch (error) {
         if (
           error instanceof MediaPlaybookContextError

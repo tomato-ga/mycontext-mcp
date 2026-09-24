@@ -17,6 +17,7 @@ import { ConfigError, loadConfig, type AppConfig, type Env } from "./config.js";
 import { jsonResponse, withSecurityHeaders } from "./http.js";
 import { inspectMcpRequest, withOpenAiToolDescriptors } from "./mcpCompatibility.js";
 import { defaultHandler } from "./oauth.js";
+import { withQueryDeadline } from "./queryDeadline.js";
 import { registerBusinessKnowledgeResources } from "./resources/businessKnowledge.js";
 import { registerEditorKnowledgeResources } from "./resources/editorKnowledge.js";
 import { registerAuthorStyleResources } from "./resources/authorStyle.js";
@@ -24,9 +25,9 @@ import { registerMetaskillResources } from "./resources/metaskill.js";
 import { createTidbClient } from "./tidb.js";
 import { registerPublicTools } from "./tools/register.js";
 
-function createServer(config: AppConfig): McpServer {
+function createServer(config: AppConfig, signal?: AbortSignal): McpServer {
   const server = new McpServer({ name: "mycontext-mcp", version: "0.8.0" });
-  const client = createTidbClient(config.tidbDatabaseUrl);
+  const client = withQueryDeadline(createTidbClient(config.tidbDatabaseUrl), { signal });
 
   registerPublicTools(server, client, config.personalSynonyms);
   registerBusinessKnowledgeResources(server, client);
@@ -52,7 +53,7 @@ const apiHandler = {
       throw error;
     }
 
-    const response = await createMcpHandler(() => createServer(config), {
+    const response = await createMcpHandler(() => createServer(config, request.signal), {
       route: MCP_ROUTE,
       responseMode: "json",
       legacy: "stateless",
