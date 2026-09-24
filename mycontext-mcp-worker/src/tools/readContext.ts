@@ -194,6 +194,13 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
             id: target.id,
             title: context.title,
             source: "editor_knowledge",
+            // Preserve the existing editor-knowledge document read-model fields.
+            sourceId: target.id.slice("editor-knowledge:".length),
+            sourceKind: null,
+            ingestScope: null,
+            sourceDeclaredAt: null,
+            detailAvailable: null,
+            sourceTruncated: false,
             markdownSha256: context.markdown_sha256,
             lastSyncedAt: context.last_synced_at,
             contextChars: context.context_chars,

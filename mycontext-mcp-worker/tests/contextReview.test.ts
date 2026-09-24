@@ -198,7 +198,7 @@ describe("production HTTP delivery boundary (authentication isolated)", () => {
       type: "text",
       text: expect.stringContaining("request deadline")
     }]);
-    expect(payload.result?.structuredContent).not.toHaveProperty("markdown");
+    expect(payload.result?.structuredContent?.markdown).toBeUndefined();
 
     const next = await httpCall();
     const recovered = await next.json() as RpcResponse;

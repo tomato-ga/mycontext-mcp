@@ -14,16 +14,20 @@ export function buildTextToolResult(
   metadata: Record<string, unknown>
 ): TextToolResult {
   const nested = metadata.context;
-  const returnedChars = typeof nested === "object" && nested !== null
-    ? (nested as Record<string, unknown>).returnedChars
+  const context = typeof nested === "object" && nested !== null
+    ? nested as Record<string, unknown>
     : undefined;
-  // context_chars describes a full context pack; read_context's contextChars
-  // may describe a larger source, so validate returnedChars there instead.
-  const expectedChars = metadata.context_chars ?? returnedChars;
+  // Validate every declared returned count, not just the first available one.
+  // A larger source count is valid only when read_context reports truncation.
+  const expectedCounts = [
+    metadata.context_chars,
+    context?.returnedChars,
+    context?.truncatedOutput === false ? context.contextChars : undefined
+  ];
   if (
     typeof text !== "string" || text.trim().length === 0 ||
-    (expectedChars !== undefined &&
-      (!Number.isInteger(expectedChars) || expectedChars !== text.length))
+    expectedCounts.some((count) => count !== undefined &&
+      (!Number.isSafeInteger(count) || count !== text.length))
   ) {
     const message = "Context delivery failed validation: the body is empty or its character count does not match. No complete context was returned.";
     return {
