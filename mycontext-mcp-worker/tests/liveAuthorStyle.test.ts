@@ -43,7 +43,7 @@ describe("live author style MCP smoke", () => {
         document_id: "ore-title-style",
         selectors: { operation: "generate", mode: "news", profile: "neutral" }
       });
-      expect((title.structuredContent as Record<string, unknown>).markdown).toBeUndefined();
+      expectCompleteProjection(title);
 
       const body = await client.callTool({
         name: "get_author_style_context",
@@ -57,6 +57,7 @@ describe("live author style MCP smoke", () => {
       });
       expect(body.isError).not.toBe(true);
       expect(body.structuredContent).toMatchObject({ document_id: "ore-body-style" });
+      expectCompleteProjection(body);
 
       const evidence = await client.callTool({
         name: "search_author_style_evidence",
@@ -66,12 +67,25 @@ describe("live author style MCP smoke", () => {
       expect(evidence.content).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: "text", text: expect.stringContaining("主要統計") })
       ]));
+      expectCompleteProjection(evidence);
     } finally {
       await client.close();
       await server.close();
     }
   });
 });
+
+function expectCompleteProjection(result: {
+  content: unknown;
+  structuredContent?: Record<string, unknown>;
+}): void {
+  const markdown = result.structuredContent?.markdown;
+  expect(markdown).toBeTypeOf("string");
+  if (typeof markdown !== "string") throw new Error("Missing structured Markdown");
+  expect(markdown.trim().length).toBeGreaterThan(0);
+  expect(result.content).toEqual([{ type: "text", text: markdown }]);
+  expect(result.structuredContent?.returned_chars).toBe(markdown.length);
+}
 
 async function readDevVar(name: string): Promise<string> {
   const contents = await fs.readFile(".dev.vars", "utf8");
