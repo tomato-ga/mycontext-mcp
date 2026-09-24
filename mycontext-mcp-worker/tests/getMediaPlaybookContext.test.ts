@@ -16,7 +16,7 @@ const PLAYBOOK = [
 ].join("\n");
 
 describe("get_media_playbook_context", () => {
-  it("returns the single-record playbook once without truncation", async () => {
+  it("returns the single-record playbook through both delivery channels without truncation", async () => {
     const execute = vi.fn().mockResolvedValue([playbookRow()]);
     const result = await callTool({ execute });
 
@@ -31,11 +31,12 @@ describe("get_media_playbook_context", () => {
       section_count: 0,
       search_span_count: 1,
       context_chars: PLAYBOOK.length,
+      markdown: PLAYBOOK,
+      returned_chars: PLAYBOOK.length,
       retrieval_mode: "full_playbook",
       truncated: false,
       source_resource_uri: "mycontext://editor-knowledge/knowhow-media-design"
     });
-    expect((result.structuredContent as Record<string, unknown>).markdown).toBeUndefined();
     expect(execute).toHaveBeenCalledWith(
       expect.stringContaining("FROM editor_knowledge_documents"),
       ["knowhow-media-design"]

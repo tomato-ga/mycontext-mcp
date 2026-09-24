@@ -31,10 +31,11 @@ describe("get_analysis_skill_context", () => {
       skill_id: "marketing-lean-canvas",
       family: "marketing",
       context_chars: MARKDOWN.length,
+      markdown: MARKDOWN,
+      returned_chars: MARKDOWN.length,
       retrieval_mode: "full_skill_and_reference",
       truncated: false
     });
-    expect((result.structuredContent as Record<string, unknown>).markdown).toBeUndefined();
     expect(execute).toHaveBeenCalledWith(
       expect.stringContaining("FROM skill_context_documents"),
       ["marketing-lean-canvas"]

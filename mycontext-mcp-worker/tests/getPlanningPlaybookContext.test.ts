@@ -16,7 +16,7 @@ const PLAYBOOK = [
 ].join("\n");
 
 describe("get_planning_playbook_context", () => {
-  it("returns the complete playbook once without truncation", async () => {
+  it("returns the complete playbook through both delivery channels without truncation", async () => {
     const execute = vi.fn().mockResolvedValue([playbookRow()]);
     const result = await callTool({ execute });
 
@@ -29,12 +29,13 @@ describe("get_planning_playbook_context", () => {
       section_count: 8,
       search_span_count: 8,
       context_chars: PLAYBOOK.length,
+      markdown: PLAYBOOK,
+      returned_chars: PLAYBOOK.length,
       retrieval_mode: "full_playbook",
       truncated: false,
       source_resource_uri:
         "mycontext://editor-knowledge/kikaku-composition-playbook"
     });
-    expect((result.structuredContent as Record<string, unknown>).markdown).toBeUndefined();
     expect(execute).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledWith(
       expect.stringContaining("FROM editor_knowledge_documents"),
