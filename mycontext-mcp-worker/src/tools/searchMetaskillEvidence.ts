@@ -8,6 +8,7 @@ import {
   validateTopK,
   type TidbClient
 } from "../tidb.js";
+import { buildTextToolResult } from "./textResult.js";
 
 export function registerSearchMetaskillEvidenceTool(server: McpServer, client: TidbClient): void {
   server.registerTool(
@@ -46,10 +47,7 @@ export function registerSearchMetaskillEvidenceTool(server: McpServer, client: T
               "",
               hit.markdown
             ].join("\n")).join("\n\n---\n\n");
-        return {
-          content: [{ type: "text" as const, text }],
-          structuredContent: { query, document_id: documentId, hits: metadata }
-        };
+        return buildTextToolResult(text, { query, document_id: documentId, hits: metadata });
       } catch (error) {
         if (error instanceof TopKValidationError) {
           return {

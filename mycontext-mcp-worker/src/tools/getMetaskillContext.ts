@@ -11,6 +11,7 @@ import {
 } from "../metaskill.js";
 import { MCP_SCOPE } from "../constants.js";
 import { getMetaskillContext, type TidbClient } from "../tidb.js";
+import { buildTextToolResult } from "./textResult.js";
 
 export function registerGetMetaskillContextTool(server: McpServer, client: TidbClient): void {
   server.registerTool(
@@ -49,10 +50,7 @@ export function registerGetMetaskillContextTool(server: McpServer, client: TidbC
           };
         }
         const { markdown: _markdown, ...metadata } = context;
-        return {
-          content: [{ type: "text" as const, text: context.markdown }],
-          structuredContent: metadata
-        };
+        return buildTextToolResult(context.markdown, metadata);
       } catch (error) {
         if (error instanceof MetaskillRoutingError || error instanceof MetaskillContextTooLargeError) {
           return {

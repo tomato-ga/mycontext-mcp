@@ -13,6 +13,9 @@ import {
   getBusinessKnowledgeSection,
   getDocument,
   getEditorKnowledgeSection,
+  getEditingPlaybookContext,
+  getMediaPlaybookContext,
+  getPlanningPlaybookContext,
   type TidbClient
 } from "../tidb.js";
 import {
@@ -20,6 +23,7 @@ import {
   SKILL_CONTEXT_IDS,
   type SkillContextId
 } from "../skillContext.js";
+import { buildTextToolResult } from "./textResult.js";
 
 const DEFAULT_MAX_CHARS = 6_000;
 const MAX_CHARS = 12_000;
@@ -38,7 +42,7 @@ const inputSchema = z.object({
     .min(500)
     .max(MAX_CHARS)
     .default(DEFAULT_MAX_CHARS)
-    .describe("Maximum Markdown characters to return. Use 6000 normally; maximum 12000.")
+    .describe("Maximum characters for ordinary documents/sections: default 6000, maximum 12000. Canonical playbooks and analysis skills always return their complete validated context; this limit does not truncate them.")
 });
 
 export type ReadContextTarget =
@@ -52,7 +56,7 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
     {
       title: "Read personal context",
       description:
-        "Read one personal-context result in detail. Only call this with an exact ID returned by search_personal_context. Returns Markdown once in text content and compact metadata in structured content.",
+        "Read one personal-context result in detail. Only call this with an exact ID returned by search_personal_context. Returns Markdown in both text content and structuredContent.markdown. Canonical planning/editing/media playbooks and analysis skills are returned in full; other documents/sections honor maxChars and report truncatedOutput.",
       inputSchema,
       annotations: {
         readOnlyHint: true,
@@ -82,24 +86,21 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
             content: [{ type: "text" as const, text: `Context not found: ${target.id}` }]
           };
         }
-        return {
-          content: [{ type: "text" as const, text: context.markdown }],
-          structuredContent: {
-            context: {
-              id: target.id,
-              skillId: context.skill_id,
-              title: context.title,
-              source: "skill_context",
-              contextChars: context.context_chars,
-              returnedChars: context.markdown.length,
-              markdownSha256: context.markdown_sha256,
-              mergeVersion: context.merge_version,
-              lastSyncedAt: context.last_synced_at,
-              retrievalMode: "full_skill_and_reference",
-              truncatedOutput: false
-            }
+        return buildTextToolResult(context.markdown, {
+          context: {
+            id: target.id,
+            skillId: context.skill_id,
+            title: context.title,
+            source: "skill_context",
+            contextChars: context.context_chars,
+            returnedChars: context.markdown.length,
+            markdownSha256: context.markdown_sha256,
+            mergeVersion: context.merge_version,
+            lastSyncedAt: context.last_synced_at,
+            retrievalMode: "full_skill_and_reference",
+            truncatedOutput: false
           }
-        };
+        });
       }
 
       if (target.kind === "section") {
@@ -115,26 +116,23 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
             };
           }
           const markdown = truncateText(section.markdown, maxChars);
-          return {
-            content: [{ type: "text" as const, text: markdown }],
-            structuredContent: {
-              context: {
-                id: target.id,
-                documentId: toEditorKnowledgeDocumentId(section.document_id),
-                title: section.title,
-                source: "editor_knowledge",
-                headingPath: section.heading_path,
-                contentLayer: section.content_layer,
-                sourceLineStart: section.source_line_start,
-                sourceLineEnd: section.source_line_end,
-                relatedSourcePath: section.related_source_path,
-                freshnessClass: section.freshness_class,
-                contextChars: section.markdown.length,
-                returnedChars: markdown.length,
-                truncatedOutput: markdown.length < section.markdown.length
-              }
+          return buildTextToolResult(markdown, {
+            context: {
+              id: target.id,
+              documentId: toEditorKnowledgeDocumentId(section.document_id),
+              title: section.title,
+              source: "editor_knowledge",
+              headingPath: section.heading_path,
+              contentLayer: section.content_layer,
+              sourceLineStart: section.source_line_start,
+              sourceLineEnd: section.source_line_end,
+              relatedSourcePath: section.related_source_path,
+              freshnessClass: section.freshness_class,
+              contextChars: section.markdown.length,
+              returnedChars: markdown.length,
+              truncatedOutput: markdown.length < section.markdown.length
             }
-          };
+          });
         }
 
         const section = await getBusinessKnowledgeSection(
@@ -149,30 +147,68 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
           };
         }
         const markdown = truncateText(section.markdown, maxChars);
-        return {
-          content: [{ type: "text" as const, text: markdown }],
-          structuredContent: {
-            context: {
-              id: target.id,
-              documentId: toBusinessKnowledgeDocumentId(section.document_id),
-              title: section.title,
-              source: "business_knowledge",
-              headingPath: section.heading_path,
-              contentLayer: section.content_layer,
-              sourceLineStart: section.source_line_start,
-              sourceLineEnd: section.source_line_end,
-              relatedSourcePath: section.related_source_path,
-              freshnessClass: section.freshness_class,
-              sourceKind: section.source_kind,
-              ingestScope: section.ingest_scope,
-              sourceDeclaredAt: section.source_declared_at,
-              detailAvailable: section.detail_available,
-              contextChars: section.markdown.length,
-              returnedChars: markdown.length,
-              truncatedOutput: markdown.length < section.markdown.length
-            }
+        return buildTextToolResult(markdown, {
+          context: {
+            id: target.id,
+            documentId: toBusinessKnowledgeDocumentId(section.document_id),
+            title: section.title,
+            source: "business_knowledge",
+            headingPath: section.heading_path,
+            contentLayer: section.content_layer,
+            sourceLineStart: section.source_line_start,
+            sourceLineEnd: section.source_line_end,
+            relatedSourcePath: section.related_source_path,
+            freshnessClass: section.freshness_class,
+            sourceKind: section.source_kind,
+            ingestScope: section.ingest_scope,
+            sourceDeclaredAt: section.source_declared_at,
+            detailAvailable: section.detail_available,
+            contextChars: section.markdown.length,
+            returnedChars: markdown.length,
+            truncatedOutput: markdown.length < section.markdown.length
           }
-        };
+        });
+      }
+
+      // Search promises a whole-playbook fallback. Reuse the validated readers
+      // directly: no generic 6k/12k slicing and no extra database/Notion lookup.
+      const playbookReader = target.id === "editor-knowledge:kikaku-composition-playbook"
+        ? getPlanningPlaybookContext
+        : target.id === "editor-knowledge:henshu-editing-playbook"
+          ? getEditingPlaybookContext
+          : target.id === "editor-knowledge:knowhow-media-design"
+            ? getMediaPlaybookContext
+            : undefined;
+      if (playbookReader !== undefined) {
+        const context = await playbookReader(client);
+        if (context === null) {
+          return {
+            isError: true,
+            content: [{ type: "text" as const, text: `Context not found: ${target.id}` }]
+          };
+        }
+        const { markdown: _markdown, ...metadata } = context;
+        return buildTextToolResult(context.markdown, {
+          ...metadata,
+          context: {
+            id: target.id,
+            title: context.title,
+            source: "editor_knowledge",
+            // Preserve the existing editor-knowledge document read-model fields.
+            sourceId: target.id.slice("editor-knowledge:".length),
+            sourceKind: null,
+            ingestScope: null,
+            sourceDeclaredAt: null,
+            detailAvailable: null,
+            sourceTruncated: false,
+            markdownSha256: context.markdown_sha256,
+            lastSyncedAt: context.last_synced_at,
+            contextChars: context.context_chars,
+            returnedChars: context.markdown.length,
+            retrievalMode: "full_playbook",
+            truncatedOutput: false
+          }
+        });
       }
 
       const document = await getDocument(client, target.id);
@@ -183,27 +219,24 @@ export function registerReadContextTool(server: McpServer, client: TidbClient): 
         };
       }
       const markdown = truncateText(document.markdown, maxChars);
-      return {
-        content: [{ type: "text" as const, text: markdown }],
-        structuredContent: {
-          context: {
-            id: document.document_id,
-            title: document.title,
-            source: document.source,
-            sourceId: document.source_id,
-            markdownSha256: document.markdown_sha256,
-            sourceKind: document.source_kind,
-            ingestScope: document.ingest_scope,
-            sourceDeclaredAt: document.source_declared_at,
-            detailAvailable: document.detail_available,
-            sourceTruncated: document.source_truncated,
-            lastSyncedAt: document.last_synced_at,
-            contextChars: document.markdown.length,
-            returnedChars: markdown.length,
-            truncatedOutput: markdown.length < document.markdown.length
-          }
+      return buildTextToolResult(markdown, {
+        context: {
+          id: document.document_id,
+          title: document.title,
+          source: document.source,
+          sourceId: document.source_id,
+          markdownSha256: document.markdown_sha256,
+          sourceKind: document.source_kind,
+          ingestScope: document.ingest_scope,
+          sourceDeclaredAt: document.source_declared_at,
+          detailAvailable: document.detail_available,
+          sourceTruncated: document.source_truncated,
+          lastSyncedAt: document.last_synced_at,
+          contextChars: document.markdown.length,
+          returnedChars: markdown.length,
+          truncatedOutput: markdown.length < document.markdown.length
         }
-      };
+      });
     }
   );
 }
