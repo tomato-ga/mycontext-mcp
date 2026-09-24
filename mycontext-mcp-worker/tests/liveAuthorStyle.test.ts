@@ -77,14 +77,19 @@ describe("live author style MCP smoke", () => {
 
 function expectCompleteProjection(result: {
   content: unknown;
-  structuredContent?: Record<string, unknown>;
+  structuredContent?: unknown;
 }): void {
-  const markdown = result.structuredContent?.markdown;
+  const value = result.structuredContent;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Missing structured output object");
+  }
+  const structured = value as Record<string, unknown>;
+  const markdown = structured.markdown;
   expect(markdown).toBeTypeOf("string");
   if (typeof markdown !== "string") throw new Error("Missing structured Markdown");
   expect(markdown.trim().length).toBeGreaterThan(0);
   expect(result.content).toEqual([{ type: "text", text: markdown }]);
-  expect(result.structuredContent?.returned_chars).toBe(markdown.length);
+  expect(structured.returned_chars).toBe(markdown.length);
 }
 
 async function readDevVar(name: string): Promise<string> {
